@@ -1,10 +1,14 @@
 {
-  "name": "calendario-envios",
+  "name": "calendario-envios-app",
   "private": true,
   "type": "module",
   "author": "Jonas",
+
   "scripts": {
     "build": "react-router build",
+
+    "vercel-build": "prisma generate && prisma migrate deploy && react-router build",
+
     "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
@@ -21,9 +25,11 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit"
   },
+
   "engines": {
     "node": ">=20.19 <22 || >=22.12"
   },
+
   "dependencies": {
     "@react-router/dev": "7.9.5",
     "@react-router/fs-routes": "7.9.5",
@@ -48,6 +54,7 @@
     "react-router-dom": "7.9.5",
     "vite-tsconfig-paths": "5.1.4"
   },
+
   "devDependencies": {
     "@prisma/client": "6.19.0",
     "@shopify/api-codegen-preset": "1.2.0",
@@ -70,12 +77,11 @@
     "typescript": "5.9.3",
     "vite": "6.3.6"
   },
-  "workspaces": [
-    "extensions/*"
-  ],
-  "trustedDependencies": [
-    "@shopify/plugin-cloudflare"
-  ],
+
+  "workspaces": ["extensions/*"],
+
+  "trustedDependencies": ["@shopify/plugin-cloudflare"],
+
   "overrides": {
     "p-map": "4.0.0"
   }
