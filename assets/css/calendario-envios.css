@@ -1,0 +1,126 @@
+/* ================================
+   Calendario de Envíos - v1.4
+   Autor: Jonas Gonzalez
+   ================================ */
+
+#ce-calendar-wrapper,
+.ce-calendar-box {
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 20px;
+    margin: 20px 0;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.06);
+    transition: all 0.2s ease-in-out;
+}
+
+#ce-calendar-wrapper:hover {
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+#ce-calendar-wrapper h3 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #1d2327;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.ce-calendar-fields {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    align-items: flex-end;
+}
+
+.ce-field {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 180px;
+}
+
+.ce-field label {
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #333;
+}
+
+.ce-calendar-box select,
+.ce-calendar-box input[type="date"] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background: #fdfdfd;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    font-size: 14px;
+}
+
+.ce-calendar-box select:focus,
+.ce-calendar-box input[type="date"]:focus {
+    border-color: #2271b1;
+    outline: none;
+    box-shadow: 0 0 0 1px #2271b1;
+    background: #fff;
+}
+
+#ce-save-calendar {
+    background: #2271b1;
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+#ce-save-calendar:hover {
+    background: #135e96;
+}
+
+#ce-calendar-message {
+    margin-top: 15px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    transition: color 0.3s ease;
+}
+
+#ce-calendar-message::before {
+    content: "💬 ";
+    opacity: 0.7;
+}
+
+/* ======================
+   Estado de error y éxito
+   ====================== */
+#ce-calendar-message.error {
+    color: #c92a2a;
+}
+
+#ce-calendar-message.success {
+    color: #2e7d32;
+}
+
+/* ======================
+   Responsive
+   ====================== */
+@media (max-width: 600px) {
+    #ce-calendar-wrapper {
+        padding: 15px;
+    }
+
+    .ce-calendar-fields {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    #ce-save-calendar {
+        width: 100%;
+        padding: 12px;
+    }
+}

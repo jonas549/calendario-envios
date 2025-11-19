@@ -1,0 +1,13 @@
+api_version = "2025-01"
+
+[[extensions]]
+
+uid = "bb59e4c1-0035-32bc-6915-03c73521cf16f6850c66"
+
+type = "ui_extension"
+name = "checkout-delivery-info"
+handle = "checkout-delivery-info"
+
+[[extensions.targeting]]
+target = "purchase.checkout.delivery-address.render-after"
+module = "./src/Checkout.jsx"

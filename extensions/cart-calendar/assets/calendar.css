@@ -1,0 +1,104 @@
+/* Calendario de Envíos - Shopify Extension */
+
+.ce-wrapper {
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.ce-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.ce-field label {
+  font-weight: 600;
+  margin-bottom: 5px;
+  display: block;
+  color: #333;
+}
+
+.ce-field select,
+.ce-field input {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+#ce-date {
+  display: none;
+}
+
+.ce-message {
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  margin: 15px 0;
+}
+
+.ce-message.success {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
+.ce-message.error {
+  background: #ffebee;
+  color: #c62828;
+}
+
+/* Flatpickr Customization */
+.flatpickr-calendar {
+  width: 100% !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+.flatpickr-day.enabled {
+  background-color: transparent !important;
+  color: #2c2c54 !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+}
+
+.flatpickr-day.enabled:hover {
+  background-color: #f0f0f0 !important;
+  color: #2c2c54 !important;
+}
+
+.flatpickr-day.disabled,
+.flatpickr-day.flatpickr-disabled {
+  background-color: transparent !important;
+  color: #2c2c54 !important;
+  opacity: 0.3 !important;
+  cursor: not-allowed !important;
+}
+
+.flatpickr-day.selected,
+.flatpickr-day.selected.enabled {
+  background-color: #007bff !important;
+  color: white !important;
+  border-radius: 6px !important;
+  font-weight: bold !important;
+}
+
+.flatpickr-day.today {
+  border: none !important;
+}
+
+.flatpickr-day.today.enabled {
+  background-color: transparent !important;
+  color: #2c2c54 !important;
+  font-weight: 600 !important;
+}
+
+.flatpickr-day.today.selected {
+  background-color: #007bff !important;
+  color: white !important;
+}
