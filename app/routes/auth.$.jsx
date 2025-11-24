@@ -1,27 +1,75 @@
-import { redirect } from "@remix-run/node";
-import { boundary } from "@shopify/shopify-app-react-router/server";
+import { Page, Layout, Card, Text, BlockStack } from "@shopify/polaris";
+import { json, redirect } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
-  console.log("🔍 [AUTH] Shop:", session.shop);
+  console.log("🏠 [INDEX] Verificando ScriptTags para:", session.shop);
 
-  // Verificar billing
-  const billingCheck = await billing.check({
-    plans: ["Plan Pro"],
-    isTest: true,
-  });
+  try {
+    // Verificar si hay ScriptTags instalados
+    const scriptsQuery = `
+      query {
+        scriptTags(first: 10) {
+          edges {
+            node {
+              id
+              src
+              displayScope
+            }
+          }
+        }
+      }
+    `;
 
-  if (!billingCheck.hasActivePayment) {
-    console.log("⚠️ [AUTH] Sin subscripción, redirigiendo a billing");
-    return redirect("/app/billing");
+    const scriptsResponse = await admin.graphql(scriptsQuery);
+    const scriptsData = await scriptsResponse.json();
+
+    console.log("📜 [INDEX] ScriptTags encontrados:", JSON.stringify(scriptsData, null, 2));
+
+    // Verificar si existe un script de calendario-envios
+    const hasCalendarScript = scriptsData.data?.scriptTags?.edges?.some(
+      ({ node }) => 
+        node.src.includes('calendario-envios') || 
+        node.src.includes('/apps/proxy/script')
+    );
+
+    if (!hasCalendarScript) {
+      console.log("⚠️ [INDEX] No hay ScriptTags instalados, redirigiendo a installer");
+      return redirect("/app/installer");
+    }
+
+    console.log("✅ [INDEX] ScriptTags verificados, mostrando dashboard");
+    return json({ shop: session.shop });
+
+  } catch (error) {
+    console.error("❌ [INDEX] Error verificando scripts:", error);
+    // En caso de error, mejor redirigir a installer por seguridad
+    return redirect("/app/installer");
   }
-
-  console.log("✅ [AUTH] Billing OK, redirigiendo a /app");
-  return redirect("/app");
 };
 
-export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
+export default function Index() {
+  return (
+    <Page title="Calendario de Envíos">
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">
+                ✅ Bienvenido al panel de administración
+              </Text>
+              <Text as="p">
+                Tu calendario está instalado y funcionando correctamente.
+              </Text>
+              <Text as="p" tone="subdued">
+                Usa el menú lateral para configurar ciudades, horarios y feriados.
+              </Text>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
+}
