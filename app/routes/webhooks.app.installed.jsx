@@ -1,4 +1,5 @@
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 export const action = async ({ request }) => {
   try {
@@ -11,10 +12,29 @@ export const action = async ({ request }) => {
       return new Response("No session", { status: 200 });
     }
 
+    // Crear config inicial si no existe
+    const existingConfig = await prisma.config.findUnique({
+      where: { shop },
+    });
+
+    if (!existingConfig) {
+      await prisma.config.create({
+        data: {
+          shop,
+          mode: "mismo_dia",
+          daysAhead: 1,
+          additionalMessage: "",
+        },
+      });
+      console.log("✅ [WEBHOOK] Config inicial creada para", shop);
+    }
+
     // Crear ScriptTag para inyectar el calendario en el storefront
+    const scriptTagUrl = `https://${process.env.SHOPIFY_APP_URL?.replace('https://', '')}/apps/proxy/script?shop=${encodeURIComponent(shop)}`;
+    
     const scriptTagResponse = await session.admin.rest.resources.ScriptTag.create({
       session: session,
-      src: `https://${process.env.SHOPIFY_APP_URL?.replace('https://', '')}/apps/proxy/script`,
+      src: scriptTagUrl,
       event: "onload",
       display_scope: "online_store",
     });
@@ -23,7 +43,7 @@ export const action = async ({ request }) => {
 
     return new Response("OK", { status: 200 });
   } catch (error) {
-    console.error("❌ [WEBHOOK] Error creando ScriptTag:", error);
+    console.error("❌ [WEBHOOK] Error:", error);
     return new Response("Error", { status: 500 });
   }
 };

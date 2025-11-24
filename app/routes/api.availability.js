@@ -4,22 +4,29 @@ export const loader = async ({ request }) => {
   try {
     const url = new URL(request.url);
     const city = url.searchParams.get("city");
+    const shop = url.searchParams.get("shop");
 
-    console.log("✅ [API/AVAILABILITY] Solicitud:", { city });
+    console.log("✅ [API/AVAILABILITY] Solicitud:", { city, shop });
 
-    if (!city) {
+    if (!city || !shop) {
       return Response.json(
-        { success: false, error: "Ciudad requerida" },
+        { success: false, error: "Ciudad y shop requeridos" },
         { status: 400 }
       );
     }
 
-    // Obtener configuración global desde Prisma
-    const globalConfig = await prisma.config.findFirst();
+    // Obtener configuración global de esta tienda
+    const globalConfig = await prisma.config.findUnique({
+      where: { shop },
+    });
     const config = globalConfig || { mode: "mismo_dia", daysAhead: 1 };
 
     const cityConfig = await prisma.city.findFirst({
-      where: { name: city, active: true },
+      where: { 
+        shop,
+        name: city, 
+        active: true 
+      },
     });
 
     if (!cityConfig) {
@@ -30,7 +37,10 @@ export const loader = async ({ request }) => {
     }
 
     const holidays = await prisma.holiday.findMany({
-      where: { active: true },
+      where: { 
+        shop,
+        active: true 
+      },
       select: { date: true },
     });
 

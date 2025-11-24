@@ -18,9 +18,11 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   const cities = await prisma.city.findMany({
+    where: { shop },
     orderBy: { createdAt: "desc" },
   });
 
@@ -28,13 +30,15 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
   const formData = await request.formData();
   const action = formData.get("_action");
 
   if (action === "create") {
     await prisma.city.create({
       data: {
+        shop,
         name: formData.get("name"),
         cutoffTime: formData.get("cutoffTime"),
         days: formData.get("days"),
@@ -45,7 +49,9 @@ export const action = async ({ request }) => {
 
   if (action === "update") {
     await prisma.city.update({
-      where: { id: formData.get("id") },
+      where: { 
+        id: formData.get("id"),
+      },
       data: {
         name: formData.get("name"),
         cutoffTime: formData.get("cutoffTime"),
@@ -57,7 +63,9 @@ export const action = async ({ request }) => {
 
   if (action === "delete") {
     await prisma.city.delete({
-      where: { id: formData.get("id") },
+      where: { 
+        id: formData.get("id"),
+      },
     });
   }
 

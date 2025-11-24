@@ -1,15 +1,30 @@
 import prisma from "../db.server";
 
-export const loader = async () => {
+export const loader = async ({ request }) => {
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+
+  if (!shop) {
+    return new Response("// Error: Missing shop parameter", {
+      headers: { "Content-Type": "application/javascript" },
+      status: 400,
+    });
+  }
+
   // Obtener configuración para incluir el mensaje adicional
-  const config = await prisma.config.findFirst();
+  const config = await prisma.config.findUnique({
+    where: { shop },
+  });
   const additionalMessage = config?.additionalMessage || "";
 
   const scriptContent = `
 (function() {
   'use strict';
   
+  const SHOP = "${shop}";
+  
   console.log('🟢 [CE] Script cargado - v1.0');
+  console.log('🟢 [CE] Shop:', SHOP);
   console.log('🟢 [CE] Pathname actual:', window.location.pathname);
   console.log('🟢 [CE] ReadyState:', document.readyState);
 
@@ -176,7 +191,7 @@ const layoutHTML = \`
     console.log('🏙️ [CE] Cargando ciudades...');
     
     try {
-      const res = await fetch('/apps/proxy/api/cities');
+      const res = await fetch('/apps/proxy/api/cities?shop=' + encodeURIComponent(SHOP));
       console.log('📡 [CE] Respuesta fetch cities:', res.status);
       
       const data = await res.json();
@@ -228,7 +243,7 @@ const layoutHTML = \`
       message.style.color = '#333';
 
       try {
-        const res = await fetch(\`/apps/proxy/api/availability?city=\${encodeURIComponent(city)}\`);
+        const res = await fetch(\`/apps/proxy/api/availability?city=\${encodeURIComponent(city)}&shop=\${encodeURIComponent(SHOP)}\`);
         console.log('📡 [CE] Respuesta availability:', res.status);
         
         const data = await res.json();

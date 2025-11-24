@@ -1,14 +1,16 @@
 import { Page, Layout, Card, Button, Text, BlockStack, Banner, Box } from "@shopify/polaris";
 import { useActionData, Form, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 import { useState, useEffect } from "react";
 
 export const action = async ({ request }) => {
   try {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    const shop = session.shop;
 
-    // URL del script del carrito
-    const cartScriptUrl = `https://calendario-envios-test.myshopify.com/apps/proxy/script`;
+    // URL del script del carrito (dinámico según el shop)
+    const cartScriptUrl = `https://${shop}/apps/proxy/script?shop=${encodeURIComponent(shop)}`;
 
     // Verificar scripts existentes
     const checkQuery = `
@@ -80,6 +82,22 @@ export const action = async ({ request }) => {
         success: false,
         message: "Error: " + data.data.scriptTagCreate.userErrors[0].message
       };
+    }
+
+    // Crear config inicial si no existe
+    const existingConfig = await prisma.config.findUnique({
+      where: { shop },
+    });
+
+    if (!existingConfig) {
+      await prisma.config.create({
+        data: {
+          shop,
+          mode: "mismo_dia",
+          daysAhead: 1,
+          additionalMessage: "",
+        },
+      });
     }
 
     return { 

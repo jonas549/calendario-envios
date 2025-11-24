@@ -5,9 +5,6 @@ generator client {
   provider = "prisma-client-js"
 }
 
-// Notee that some adapters may set a maximum length for the String type by default, please ensure your strings are long
-// enough when changing adapters.
-// See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -33,26 +30,36 @@ model Session {
 
 model City {
   id          String   @id @default(cuid())
-  name        String   @unique
+  shop        String
+  name        String
   cutoffTime  String
   days        String
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  @@unique([shop, name])
+  @@index([shop])
 }
 
 model Holiday {
   id        String   @id @default(cuid())
+  shop      String
   date      DateTime
   name      String
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+
+  @@index([shop])
 }
 
 model Config {
   id                 String   @id @default(cuid())
+  shop               String   @unique
   mode               String   @default("mismo_dia")
   daysAhead          Int      @default(1)
   additionalMessage  String   @default("")
   updatedAt          DateTime @updatedAt
+
+  @@index([shop])
 }

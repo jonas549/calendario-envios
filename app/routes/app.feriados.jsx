@@ -19,9 +19,11 @@ import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   const holidays = await prisma.holiday.findMany({
+    where: { shop },
     orderBy: { date: "asc" },
   });
 
@@ -29,13 +31,15 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
   const formData = await request.formData();
   const action = formData.get("_action");
 
   if (action === "create") {
     await prisma.holiday.create({
       data: {
+        shop,
         date: new Date(formData.get("date")),
         name: formData.get("name"),
         active: formData.get("active") === "true",
