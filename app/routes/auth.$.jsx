@@ -7,7 +7,6 @@ export const loader = async ({ request }) => {
 
   console.log("🔍 [AUTH] Shop:", session.shop);
 
-  // Verificar billing
   const billingCheck = await billing.check({
     plans: ["Plan Pro"],
     isTest: true,
