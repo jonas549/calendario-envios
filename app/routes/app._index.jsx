@@ -86,7 +86,7 @@ export default function Index() {
                 Tu calendario está instalado y funcionando correctamente.
               </Text>
               <Text as="p" tone="subdued">
-                Usa el menú lateral para configurar ciudades, horarios y feriados.
+                Usa el menú lateral para configurar ciudades, horarios y feriado.
               </Text>
             </BlockStack>
           </Card>
