@@ -3,22 +3,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
-  const { billing, session } = await authenticate.admin(request);
-
-  console.log("🔍 [AUTH] Shop:", session.shop);
-
-  const billingCheck = await billing.check({
-    plans: ["Plan Pro"],
-    isTest: true,
-  });
-
-  if (!billingCheck.hasActivePayment) {
-    console.log("⚠️ [AUTH] Sin subscripción, redirigiendo a billing");
-    return redirect("/app/billing");
-  }
-
-  console.log("✅ [AUTH] Billing OK, redirigiendo a /app");
-  return redirect("/app");
+  await authenticate.admin(request);
+  
+  // SIEMPRE redirigir a billing después de OAuth
+  return redirect("/app/billing");
 };
 
 export const headers = (headersArgs) => {
