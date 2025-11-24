@@ -1,4 +1,4 @@
-import { redirect } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { Page, Layout, Card, Text, BlockStack } from "@shopify/polaris";
 
@@ -7,7 +7,6 @@ export const loader = async ({ request }) => {
 
   console.log("🔍 [INDEX] Shop:", session.shop);
 
-  // Verificar si tiene ScriptTags instalados
   const scriptsQuery = `
     query {
       scriptTags(first: 50) {
@@ -34,7 +33,7 @@ export const loader = async ({ request }) => {
   }
 
   console.log("✅ [INDEX] Scripts instalados, mostrando dashboard");
-  return null;
+  return json({ shop: session.shop });
 };
 
 export default function Index() {
