@@ -25,6 +25,13 @@ export default function AppLayout() {
                 { label: "Feriados", url: `/app/feriados${queryString ? `?${queryString}` : ''}` },
               ]}
             />
+            <Navigation.Section
+              title="Herramientas"
+              items={[
+                { label: "Instalador", url: `/app/installer${queryString ? `?${queryString}` : ''}` },
+                { label: "Soporte", url: `/app/soporte${queryString ? `?${queryString}` : ''}` },
+              ]}
+            />
           </Navigation>
         }
       >
