@@ -63,3 +63,17 @@ model Config {
 
   @@index([shop])
 }
+
+model Log {
+  id        String   @id @default(cuid())
+  shop      String?
+  level     String   // "info", "warn", "error", "debug"
+  module    String   // "auth", "billing", "installer", "webhook"
+  message   String
+  data      String?  // JSON stringificado con datos adicionales
+  createdAt DateTime @default(now())
+
+  @@index([shop])
+  @@index([module])
+  @@index([createdAt])
+}
