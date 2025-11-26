@@ -6,7 +6,8 @@ import {
   BillingInterval,
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
-import prisma from "./db.server";
+import { prisma } from "./db.server";
+import { logger } from "./utils/logger.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -38,14 +39,18 @@ const shopify = shopifyApp({
 export const authenticate = {
   admin: async (request) => {
     const url = new URL(request.url);
-    console.log("\n🔍 REQUEST:", url.pathname);
-    console.log("📋 HEADERS:");
-    for (const [key, value] of request.headers.entries()) {
-      console.log(`   ${key}: ${value.substring(0, 100)}`);
-    }
+    
+    logger.debug("shopify-auth", `Autenticando request: ${url.pathname}`, {
+      method: request.method,
+      pathname: url.pathname
+    });
     
     const result = await shopify.authenticate.admin(request);
-    console.log("✅ AUTH OK\n");
+    
+    logger.info("shopify-auth", `Autenticación exitosa: ${url.pathname}`, {
+      shop: result.session?.shop
+    }, result.session?.shop);
+    
     return result;
   },
 
@@ -55,12 +60,16 @@ export const authenticate = {
 
 // Helper para verificar subscripción activa
 export async function requireBilling(request) {
-  const { billing } = await authenticate.admin(request);
+  const { billing, session } = await authenticate.admin(request);
+  
+  logger.info("billing-check", "Verificando billing", null, session.shop);
   
   await billing.require({
     plans: ["Plan Pro"],
-    isTest: true, // Cambiar a false en producción
+    isTest: true,
   });
+  
+  logger.info("billing-check", "Billing verificado OK", null, session.shop);
 }
 
 export default shopify;
