@@ -47,7 +47,7 @@ export default function App() {
             <strong>Horarios de corte</strong>. Define horarios límite por ciudad para garantizar entregas a tiempo.
           </li>
           <li>
-            <strong>Gestión de feriados</strong>. Bloquea fechas no laborables automáticamente en el calendario.
+            <strong>Gestión de feriados</strong>. Bloquea fechas no laborables automáticamente en el calendario
           </li>
         </ul>
       </div>
