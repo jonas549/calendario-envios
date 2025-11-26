@@ -1,17 +1,16 @@
+// app/routes/_index.jsx  (o el archivo donde está este código)
 import { redirect } from "react-router";
 import { Form, useLoaderData } from "react-router";
+
 import { login } from "../../shopify.server";
-import { logger } from "../../utils/logger.server";
 import styles from "./styles.module.css";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
-  // Si tiene parámetro shop, redirigir a BILLING (no a /app)
+  // 👇 ESTA REDIRECCIÓN ES LA QUE NECESITA LA APP EMBEBIDA
   if (url.searchParams.get("shop")) {
-    const shop = url.searchParams.get("shop");
-    logger.info("root", "Redirigiendo a billing desde root", { shop }, shop);
-    throw redirect(`/app/billing?${url.searchParams.toString()}`);
+    throw redirect(`/app?${url.searchParams.toString()}`);
   }
 
   return { showForm: Boolean(login) };
@@ -23,9 +22,9 @@ export default function App() {
   return (
     <div className={styles.index}>
       <div className={styles.content}>
-        <h1 className={styles.heading}>Calendario de Envíos</h1>
+        <h1 className={styles.heading}>A short heading about [your app]</h1>
         <p className={styles.text}>
-          Permite a tus clientes seleccionar fechas de entrega personalizadas.
+          A tagline about [your app] that describes your value proposition.
         </p>
         {showForm && (
           <Form className={styles.form} method="post" action="/auth/login">
@@ -41,13 +40,16 @@ export default function App() {
         )}
         <ul className={styles.list}>
           <li>
-            <strong>Fechas personalizadas</strong>. Tus clientes pueden elegir su fecha de entrega preferida basada en tu disponibilidad.
+            <strong>Product feature</strong>. Some detail about your feature and
+            its benefit to your customer.
           </li>
           <li>
-            <strong>Horarios de corte</strong>. Define horarios límite por ciudad para garantizar entregas a tiempo.
+            <strong>Product feature</strong>. Some detail about your feature and
+            its benefit to your customer.
           </li>
           <li>
-            <strong>Gestión de feriados</strong>. Bloquea fechas no laborables automáticamente en el calendario
+            <strong>Product feature</strong>. Some detail about your feature and
+            its benefit to your customer.
           </li>
         </ul>
       </div>
