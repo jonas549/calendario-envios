@@ -1,14 +1,12 @@
-// app/routes/_index.jsx  (o el archivo donde está este código)
 import { redirect } from "react-router";
 import { Form, useLoaderData } from "react-router";
-
 import { login } from "../../shopify.server";
 import styles from "./styles.module.css";
 
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
 
-  // 👇 ESTA REDIRECCIÓN ES LA QUE NECESITA LA APP EMBEBIDA
+  // Dejar como estaba - redirect a /app
   if (url.searchParams.get("shop")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
