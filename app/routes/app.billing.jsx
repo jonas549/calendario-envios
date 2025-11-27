@@ -1,5 +1,4 @@
 import { Page, Layout, Card, Text, BlockStack } from "@shopify/polaris";
-import { redirect } from "@remix-run/node";
 import { authenticate } from "../shopify.server";
 import { logger } from "../utils/logger.server";
 
@@ -10,42 +9,46 @@ export const loader = async ({ request }) => {
 
     logger.info("billing", "Verificando billing", { shop }, shop);
 
-    // Verificar si ya tiene una subscripción activa
-    const billingCheck = await billing.require({
+    // Verificar si ya tiene subscripción
+    const billingCheck = await billing.check({
       plans: ["Plan Pro"],
-      onFailure: async () => {
-        logger.info("billing", "No tiene subscripción activa, creando cargo...", null, shop);
-        
-        const billingResponse = await billing.request({
-          plan: "Plan Pro",
-          isTest: true,
-          amount: 25,
-          currencyCode: "USD",
-          interval: "EVERY_30_DAYS",
-          trialDays: 3,
-        });
-
-        logger.info("billing", "Cargo creado, redirigiendo a confirmationUrl", { 
-          confirmationUrl: billingResponse.confirmationUrl 
-        }, shop);
-
-        return billingResponse;
-      },
+      isTest: true,
     });
 
-    // Si la subscripción fue aprobada, redirigir al installer
-    if (billingCheck.appSubscriptions.length > 0) {
-      logger.info("billing", "Subscripción activa encontrada", { 
-        subscriptionId: billingCheck.appSubscriptions[0].id,
-        subscriptionName: billingCheck.appSubscriptions[0].name
-      }, shop);
+    if (billingCheck.hasActivePayment) {
+      logger.info("billing", "Ya tiene subscripción activa, redirigiendo a installer", null, shop);
       
-      logger.info("billing", "Redirigiendo a /app/installer", null, shop);
-      return redirect("/app/installer");
+      // Ya tiene pago, ir al installer
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: "/app/installer"
+        }
+      });
     }
 
-    logger.warn("billing", "No se encontró subscripción pero no se creó cargo", null, shop);
-    return null;
+    // NO tiene pago, crear cargo
+    logger.info("billing", "No tiene subscripción, creando cargo", null, shop);
+
+    const billingResponse = await billing.request({
+      plan: "Plan Pro",
+      isTest: true,
+      returnUrl: `${process.env.SHOPIFY_APP_URL}/app/installer`
+    });
+
+    logger.info("billing", "Cargo creado, redirigiendo a confirmationUrl", {
+      confirmationUrl: billingResponse.confirmationUrl
+    }, shop);
+
+    // CRÍTICO: Redirigir FUERA del iframe a la página de pago de Shopify
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: billingResponse.confirmationUrl,
+        "X-Shopify-API-Request-Failure-Reauthorize": "1",
+        "X-Shopify-API-Request-Failure-Reauthorize-Url": billingResponse.confirmationUrl
+      }
+    });
 
   } catch (error) {
     logger.error("billing", "Error en billing loader", {
@@ -67,7 +70,7 @@ export default function Billing() {
                 💳 Procesando pago...
               </Text>
               <Text as="p">
-                Serás redirigido automáticamente para aprobar la subscripción de $25/mes.
+                Serás redirigido automáticamente para aprobar la subscripción de $25/mes con 3 días de prueba gratis.
               </Text>
             </BlockStack>
           </Card>
