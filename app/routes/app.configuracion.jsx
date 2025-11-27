@@ -2,13 +2,19 @@ import { Page, Layout, Card, FormLayout, Select, TextField, Button, Text, BlockS
 import { useState } from "react";
 import { useLoaderData, useActionData, useSubmit } from "react-router";
 import { authenticate } from "../shopify.server";
-import prisma from "../db.server";
+import { prisma } from "../db.server";
+import { logger } from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
-  // Cargar desde Prisma
-  const config = await prisma.config.findFirst();
+  logger.debug("configuracion", "Cargando config", null, shop);
+
+  // Cargar config de esta tienda
+  const config = await prisma.config.findUnique({
+    where: { shop }
+  });
 
   return { 
     config: config || { mode: "mismo_dia", daysAhead: 1, additionalMessage: "" }
@@ -16,7 +22,8 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
+  const shop = session.shop;
   const formData = await request.formData();
 
   const configData = {
@@ -25,63 +32,67 @@ export const action = async ({ request }) => {
     additionalMessage: formData.get("additionalMessage") || "",
   };
 
-  console.log("💾 [CONFIGURACION] Guardando:", configData);
+  logger.info("configuracion", "Guardando config", configData, shop);
 
-  // 1. Guardar en Prisma (para acceso público)
-  const existingConfig = await prisma.config.findFirst();
-  
-  if (existingConfig) {
-    await prisma.config.update({
-      where: { id: existingConfig.id },
-      data: configData
+  try {
+    // Guardar en Prisma con shop
+    await prisma.config.upsert({
+      where: { shop },
+      create: {
+        shop,
+        ...configData
+      },
+      update: configData
     });
-  } else {
-    await prisma.config.create({
-      data: configData
-    });
-  }
 
-  // 2. Guardar en metafields (para backup)
-  const shopResponse = await admin.graphql(`
-    #graphql
-    query {
-      shop {
-        id
-      }
-    }
-  `);
-
-  const shopData = await shopResponse.json();
-  const shopId = shopData.data.shop.id;
-
-  await admin.graphql(`
-    #graphql
-    mutation UpdateConfig($input: [MetafieldsSetInput!]!) {
-      metafieldsSet(metafields: $input) {
-        metafields {
+    // Guardar en metafields (backup)
+    const shopResponse = await admin.graphql(`
+      #graphql
+      query {
+        shop {
           id
         }
-        userErrors {
-          field
-          message
+      }
+    `);
+
+    const shopData = await shopResponse.json();
+    const shopId = shopData.data.shop.id;
+
+    await admin.graphql(`
+      #graphql
+      mutation UpdateConfig($input: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $input) {
+          metafields {
+            id
+          }
+          userErrors {
+            field
+            message
+          }
         }
       }
-    }
-  `, {
-    variables: {
-      input: [{
-        namespace: "calendario_envios",
-        key: "config",
-        type: "json",
-        value: JSON.stringify(configData),
-        ownerId: shopId
-      }]
-    }
-  });
+    `, {
+      variables: {
+        input: [{
+          namespace: "calendario_envios",
+          key: "config",
+          type: "json",
+          value: JSON.stringify(configData),
+          ownerId: shopId
+        }]
+      }
+    });
 
-  console.log("✅ [CONFIGURACION] Guardado en Prisma y metafields");
+    logger.info("configuracion", "Config guardada exitosamente", null, shop);
 
-  return { success: true };
+    return { success: true };
+  } catch (error) {
+    logger.error("configuracion", "Error guardando config", {
+      error: error.message,
+      stack: error.stack
+    }, shop);
+    return { success: false, error: error.message };
+  }
 };
 
 export default function Configuracion() {
@@ -122,7 +133,7 @@ export default function Configuracion() {
 
           {actionData?.success === false && (
             <Banner status="critical">
-              ❌ Error al guardar configuración
+              ❌ Error al guardar configuración: {actionData.error}
             </Banner>
           )}
 
