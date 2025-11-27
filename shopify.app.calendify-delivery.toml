@@ -2,19 +2,22 @@
 
 client_id = "77e6d604777aba4f14e39d1145123fbe"
 name = "Calendify Delivery"
-application_url = "https://example.com"
+application_url = "https://calendario-envios.vercel.app"
 embedded = true
 
 [build]
 automatically_update_urls_on_dev = true
-include_config_on_deploy = true
-
-[webhooks]
-api_version = "2026-01"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
 scopes = "write_products,write_script_tags"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://calendario-envios.vercel.app/auth/callback" ]
+
+[webhooks]
+api_version = "2025-10"
+
+[[webhooks.subscriptions]]
+compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+uri = "/webhooks/gdpr"
