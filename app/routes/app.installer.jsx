@@ -54,7 +54,7 @@ export const action = async ({ request }) => {
     logger.info("installer", "Iniciando instalación de scripts", null, shop);
 
     // URL del script del carrito
-    const cartScriptUrl = `https://${shop}/apps/proxy/script?shop=${encodeURIComponent(shop)}`;
+const cartScriptUrl = "https://calendario-envios.vercel.app/calendar-script.js";
 
     logger.debug("installer", "URL del script", { cartScriptUrl }, shop);
 
