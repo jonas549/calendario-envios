@@ -51,7 +51,7 @@ export const action = async ({ request }) => {
 
     logger.info("installer", "Iniciando instalación", null, shop);
 
-    const cartScriptUrl = "https://calendario-envios.vercel.app/calendar-script.js";
+    const cartScriptUrl = `https://calendario-envios.vercel.app/api/script?shop=${encodeURIComponent(shop)}`;
 
     // Obtener scripts existentes
     const queryScripts = `
