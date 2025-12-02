@@ -12,9 +12,24 @@ export const loader = async ({ request }) => {
 
     logger.debug("installer", "Verificando scripts existentes", null, shop);
 
-    const response = await admin.rest.resources.ScriptTag.all({ session });
-    const hasScript = response.data.some(script => 
-      script.src.includes('calendario-envios')
+    const query = `
+      query {
+        scriptTags(first: 50) {
+          edges {
+            node {
+              id
+              src
+            }
+          }
+        }
+      }
+    `;
+
+    const response = await admin.graphql(query);
+    const data = await response.json();
+    
+    const hasScript = data.data.scriptTags.edges.some(edge => 
+      edge.node.src.includes('calendario-envios')
     );
 
     logger.debug("installer", `Scripts instalados: ${hasScript}`, null, shop);
@@ -39,30 +54,79 @@ export const action = async ({ request }) => {
     const cartScriptUrl = "https://calendario-envios.vercel.app/calendar-script.js";
 
     // Obtener scripts existentes
-    const response = await admin.rest.resources.ScriptTag.all({ session });
-    
+    const queryScripts = `
+      query {
+        scriptTags(first: 50) {
+          edges {
+            node {
+              id
+              src
+            }
+          }
+        }
+      }
+    `;
+
+    const getResponse = await admin.graphql(queryScripts);
+    const getData = await getResponse.json();
+
     // Eliminar scripts antiguos
-    const existingScripts = response.data.filter(script => 
-      script.src.includes('calendario-envios')
-    );
-    
-    for (const script of existingScripts) {
-      await admin.rest.resources.ScriptTag.delete({ 
-        session, 
-        id: script.id 
-      });
-      logger.info("installer", `Script eliminado: ${script.id}`, null, shop);
+    for (const edge of getData.data.scriptTags.edges) {
+      if (edge.node.src.includes('calendario-envios')) {
+        logger.info("installer", `Eliminando script: ${edge.node.id}`, null, shop);
+        
+        const deleteMutation = `
+          mutation scriptTagDelete($id: ID!) {
+            scriptTagDelete(id: $id) {
+              deletedScriptTagId
+            }
+          }
+        `;
+        
+        await admin.graphql(deleteMutation, {
+          variables: { id: edge.node.id }
+        });
+      }
     }
 
     // Crear nuevo script
-    const scriptTag = new admin.rest.resources.ScriptTag({ session });
-    scriptTag.event = "onload";
-    scriptTag.src = cartScriptUrl;
-    await scriptTag.save({ update: true });
+    logger.info("installer", "Creando nuevo script", null, shop);
 
-    logger.info("installer", "Script creado exitosamente", { 
-      id: scriptTag.id 
-    }, shop);
+    const createMutation = `
+      mutation scriptTagCreate($input: ScriptTagInput!) {
+        scriptTagCreate(input: $input) {
+          scriptTag {
+            id
+            src
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    const createResponse = await admin.graphql(createMutation, {
+      variables: {
+        input: {
+          src: cartScriptUrl,
+          displayScope: "ONLINE_STORE"
+        }
+      }
+    });
+
+    const createData = await createResponse.json();
+
+    if (createData.data.scriptTagCreate.userErrors.length > 0) {
+      const errorMsg = createData.data.scriptTagCreate.userErrors[0].message;
+      logger.error("installer", "Error de GraphQL", { error: errorMsg }, shop);
+      
+      return {
+        success: false,
+        message: `Error: ${errorMsg}`
+      };
+    }
 
     // Crear config inicial si no existe
     const existingConfig = await prisma.config.findUnique({
@@ -80,10 +144,14 @@ export const action = async ({ request }) => {
       logger.info("installer", "Config inicial creada", null, shop);
     }
 
+    logger.info("installer", "Instalación completada", {
+      scriptId: createData.data.scriptTagCreate.scriptTag.id
+    }, shop);
+
     return { 
       success: true, 
       message: "✅ Calendario instalado correctamente. Ahora configura tus ciudades y feriados.",
-      scriptId: scriptTag.id,
+      scriptId: createData.data.scriptTagCreate.scriptTag.id,
       scriptUrl: cartScriptUrl
     };
 
@@ -192,7 +260,7 @@ export default function Installer() {
               </Box>
 
               <Text as="p" tone="subdued" variant="bodySm">
-                💡 Después de instalar, configura tus ciudades y feriados desde el menú lateral
+                💡 Después de instalar, configura tus ciudades y feriados desde el menú lateral.
               </Text>
             </BlockStack>
           </Card>
