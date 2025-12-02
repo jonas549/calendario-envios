@@ -137,8 +137,9 @@ export const action = async ({ request }) => {
       await prisma.config.create({
         data: {
           shop,
-          setting: "mode",
-          value: "mismo_dia"
+          mode: "mismo_dia",
+          daysAhead: 1,
+          additionalMessage: ""
         }
       });
       logger.info("installer", "Config inicial creada", null, shop);
