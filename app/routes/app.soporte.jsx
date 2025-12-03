@@ -20,26 +20,9 @@ export default function Soporte() {
                   📧 Contacto
                 </Text>
                 <Text as="p">
-                  Email: <Link url="mailto:soporte@ejemplo.com">soporte@ejemplo.com</Link>
+                  Email: <Link url="mailto:soporte@ejemplo.com">contacto@appsdeveloperspro.com</Link>
                 </Text>
 
-                <Text as="h3" variant="headingMd">
-                  📚 Recursos útiles
-                </Text>
-                <BlockStack gap="200">
-                  <Text as="p">
-                    • <Link url="/app/configuracion">Configuración general</Link> - Configura el modo de entrega
-                  </Text>
-                  <Text as="p">
-                    • <Link url="/app/ciudades">Ciudades</Link> - Gestiona ciudades y horarios de corte
-                  </Text>
-                  <Text as="p">
-                    • <Link url="/app/feriados">Feriados</Link> - Configura días no laborables
-                  </Text>
-                  <Text as="p">
-                    • <Link url="/app/installer">Instalador</Link> - Reinstala el calendario si es necesario
-                  </Text>
-                </BlockStack>
 
                 <Text as="h3" variant="headingMd">
                   🎥 Video tutorial
