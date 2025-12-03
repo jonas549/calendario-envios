@@ -37,10 +37,11 @@ export const action = async ({ request }) => {
   const action = formData.get("_action");
 
   if (action === "create") {
+    const dateString = formData.get("date");
     await prisma.holiday.create({
       data: {
         shop,
-        date: new Date(formData.get("date")),
+        date: new Date(dateString + "T00:00:00.000Z"),
         name: formData.get("name"),
         active: formData.get("active") === "true",
       },
@@ -48,10 +49,11 @@ export const action = async ({ request }) => {
   }
 
   if (action === "update") {
+    const dateString = formData.get("date");
     await prisma.holiday.update({
       where: { id: formData.get("id") },
       data: {
-        date: new Date(formData.get("date")),
+        date: new Date(dateString + "T00:00:00.000Z"),
         name: formData.get("name"),
         active: formData.get("active") === "true",
       },
