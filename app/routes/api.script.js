@@ -211,7 +211,8 @@ const layoutHTML = \`
           console.log('⚠️ [CE] Intento de checkout sin selección');
         } else {
           console.log('✅ [CE] Redirigiendo a checkout');
-          window.location.href = '/checkout';
+          const city = localStorage.getItem('ce_delivery_city');
+          window.location.href = \`/checkout?checkout[shipping_address][city]=\${encodeURIComponent(city)}\`;
         }
       };
     }
