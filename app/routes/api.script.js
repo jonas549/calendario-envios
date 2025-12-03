@@ -22,6 +22,7 @@ export const loader = async ({ request }) => {
   'use strict';
   
   const SHOP = "${shop}";
+  let deliverySelected = false;
   
   console.log('🟢 [CE] Script cargado - v1.0');
   console.log('🟢 [CE] Shop:', SHOP);
@@ -115,6 +116,22 @@ const layoutHTML = \`
           ${additionalMessage.replace(/\n/g, '<br>')}
         </div>
         ` : ''}
+
+        <button id="ce-checkout-btn" style="
+          width: 100%;
+          padding: 15px;
+          margin-top: 15px;
+          background: #000;
+          color: #fff;
+          border: none;
+          border-radius: 4px;
+          font-size: 16px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s ease;
+        ">
+          Proceder al pago
+        </button>
       </div>
     </div>
     
@@ -155,11 +172,49 @@ const layoutHTML = \`
     const inserted = document.querySelector('#ce-calendar-wrapper');
     console.log('🔍 [CE] Calendario visible?', !!inserted);
 
+    // Ocultar botones originales de checkout
+    hideOriginalCheckoutButtons();
+
+    // Configurar botón de checkout personalizado
+    setupCheckoutButton();
+
     loadFlatpickr(() => {
       console.log('✅ [CE] Flatpickr cargado');
       loadCities();
       setupEventListeners();
     });
+  }
+
+  function hideOriginalCheckoutButtons() {
+    const checkoutButtons = document.querySelectorAll(
+      'button[name="checkout"], ' +
+      'input[name="checkout"], ' +
+      '[href*="/checkout"], ' +
+      '.cart__checkout, ' +
+      '.cart__checkout-button, ' +
+      'button[type="submit"][form*="cart"]'
+    );
+    
+    checkoutButtons.forEach(btn => {
+      btn.style.display = 'none';
+    });
+    
+    console.log('🚫 [CE] Botones de checkout originales ocultados:', checkoutButtons.length);
+  }
+
+  function setupCheckoutButton() {
+    const checkoutBtn = document.querySelector('#ce-checkout-btn');
+    if (checkoutBtn) {
+      checkoutBtn.onclick = () => {
+        if (!deliverySelected) {
+          alert('⚠️ Por favor selecciona una ciudad y fecha de despacho antes de continuar.');
+          console.log('⚠️ [CE] Intento de checkout sin selección');
+        } else {
+          console.log('✅ [CE] Redirigiendo a checkout');
+          window.location.href = '/checkout';
+        }
+      };
+    }
   }
 
   function loadFlatpickr(callback) {
@@ -235,6 +290,7 @@ const layoutHTML = \`
         dateInput.placeholder = 'Selecciona una ciudad primero';
         message.textContent = '';
         allAvailableDates = [];
+        deliverySelected = false;
         return;
       }
 
@@ -327,6 +383,9 @@ const layoutHTML = \`
       });
 
       console.log('✅ [CE] Guardado en carrito');
+      
+      // Marcar como seleccionado
+      deliverySelected = true;
       
     } catch (err) {
       console.error('❌ [CE] Error guardando:', err);
