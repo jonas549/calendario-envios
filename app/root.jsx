@@ -15,14 +15,20 @@ const i18n = {
   },
 };
 
-export const loader = () => {
+export const loader = ({ request }) => {
+  const url = new URL(request.url);
+  const host = url.searchParams.get("host");
+  const shop = url.searchParams.get("shop");
+  
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    host: host || "",
+    shop: shop || "",
   };
 };
 
 export default function App() {
-  const { apiKey } = useLoaderData();
+  const { apiKey, host } = useLoaderData();
 
   return (
     <html lang="es">
@@ -39,7 +45,7 @@ export default function App() {
       </head>
 
       <body>
-        <AppProvider isEmbeddedApp apiKey={apiKey} i18n={i18n}>
+        <AppProvider isEmbeddedApp apiKey={apiKey} host={host} i18n={i18n}>
           <Outlet />
         </AppProvider>
         <ScrollRestoration />
