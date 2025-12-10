@@ -82,7 +82,7 @@ export default function Installer() {
   useEffect(() => {
     if (actionData?.success && actionData?.redirect) {
       const timer = setTimeout(() => {
-        navigate(`/app/onboarding${window.location.search}`);
+        navigate("/app/onboarding");
       }, 1500);
       return () => clearTimeout(timer);
     }
@@ -170,7 +170,7 @@ export default function Installer() {
 
                   {hasConfig && (
                     <Button 
-                      url="/app/onboarding"
+                      onClick={() => navigate("/app/onboarding")}
                       size="large"
                     >
                       Ver Instrucciones de Instalación

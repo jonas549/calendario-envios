@@ -1,5 +1,5 @@
 import { Page, Layout, Card, Button, Text, BlockStack, Banner, List } from "@shopify/polaris";
-import { useLoaderData } from "react-router";
+import { useLoaderData, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }) => {
@@ -14,6 +14,7 @@ export const loader = async ({ request }) => {
 
 export default function Onboarding() {
   const { themeEditorUrl } = useLoaderData();
+  const navigate = useNavigate();
 
   return (
     <Page
@@ -26,7 +27,7 @@ export default function Onboarding() {
       secondaryActions={[
         {
           content: "Ya lo activé, ir al Dashboard",
-          url: "/app",
+          onAction: () => navigate("/app"),
         }
       ]}
     >
