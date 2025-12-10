@@ -1,0 +1,150 @@
+{% if request.page_type == 'cart' %}
+<div id="calendify-delivery-widget" style="margin: 20px 0; padding: 20px; border: 2px solid #e9e9e9; border-radius: 8px; background: #fff;">
+  <h3 style="margin: 0 0 15px 0; font-size: 18px;">📅 Calcular envío</h3>
+  
+  <div style="margin-bottom: 15px;">
+    <label for="ce-city" style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px;">Ciudad</label>
+    <select id="ce-city" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+      <option value="">--Selecciona Comuna--</option>
+    </select>
+  </div>
+
+  <div style="margin-bottom: 15px;">
+    <label for="ce-date" style="display: block; font-weight: 600; margin-bottom: 5px; font-size: 14px;">Fecha de entrega</label>
+    <input type="text" id="ce-date" readonly placeholder="Selecciona una ciudad primero" style="width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;">
+  </div>
+
+  <div id="ce-message" style="padding: 10px; border-radius: 4px; font-size: 13px; margin-top: 10px;"></div>
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+
+<script>
+(function() {
+  'use strict';
+  
+  const SHOP = "{{ shop.permanent_domain }}";
+  let deliverySelected = false;
+  
+  loadCities();
+  setupEventListeners();
+
+  async function loadCities() {
+    try {
+      const res = await fetch('/apps/proxy/api/cities?shop=' + encodeURIComponent(SHOP));
+      const data = await res.json();
+
+      if (data.success && Array.isArray(data.cities)) {
+        const select = document.querySelector('#ce-city');
+        data.cities.forEach(city => {
+          const option = document.createElement('option');
+          option.value = city.name;
+          option.textContent = city.name;
+          select.appendChild(option);
+        });
+      }
+    } catch (err) {
+      console.error('Error cargando ciudades:', err);
+    }
+  }
+
+  let flatpickrInstance = null;
+
+  function setupEventListeners() {
+    const citySelect = document.querySelector('#ce-city');
+    const dateInput = document.querySelector('#ce-date');
+    const message = document.querySelector('#ce-message');
+
+    citySelect.addEventListener('change', async () => {
+      const city = citySelect.value;
+
+      if (!city) {
+        if (flatpickrInstance) {
+          flatpickrInstance.destroy();
+          flatpickrInstance = null;
+        }
+        dateInput.value = '';
+        message.textContent = '';
+        deliverySelected = false;
+        return;
+      }
+
+      message.textContent = '⏳ Cargando fechas disponibles...';
+      message.style.background = '#f0f0f0';
+      message.style.color = '#333';
+
+      try {
+        const res = await fetch(`/apps/proxy/api/availability?city=${encodeURIComponent(city)}&shop=${encodeURIComponent(SHOP)}`);
+        const data = await res.json();
+
+        if (data.success && Array.isArray(data.availableDates) && data.availableDates.length > 0) {
+          if (flatpickrInstance) flatpickrInstance.destroy();
+
+          flatpickrInstance = flatpickr(dateInput, {
+            locale: 'es',
+            dateFormat: 'Y-m-d',
+            minDate: data.availableDates[0],
+            enable: data.availableDates,
+            inline: true,
+            onChange(selectedDates, dateStr) {
+              saveToCart(city, dateStr);
+              message.textContent = `✅ Fecha seleccionada: ${dateStr}`;
+              message.style.background = '#e8f5e9';
+              message.style.color = '#2e7d32';
+            }
+          });
+
+          message.textContent = `✅ ${data.availableDates.length} fecha(s) disponible(s)`;
+          message.style.background = '#e8f5e9';
+          message.style.color = '#2e7d32';
+        } else {
+          message.textContent = '⚠️ No hay fechas disponibles';
+          message.style.background = '#fff3cd';
+          message.style.color = '#856404';
+        }
+      } catch (err) {
+        console.error('Error:', err);
+        message.textContent = '❌ Error al cargar fechas';
+        message.style.background = '#ffebee';
+        message.style.color = '#c62828';
+      }
+    });
+  }
+
+  async function saveToCart(city, date) {
+    try {
+      localStorage.setItem('ce_delivery_city', city);
+      localStorage.setItem('ce_delivery_date', date);
+      
+      const formData = new FormData();
+      formData.append('attributes[delivery_city]', city);
+      formData.append('attributes[delivery_date]', date);
+
+      await fetch('/cart/update.js', {
+        method: 'POST',
+        body: formData
+      });
+
+      deliverySelected = true;
+      
+      // Pre-rellenar ciudad en checkout
+      const city = localStorage.getItem('ce_delivery_city');
+      const checkoutBtns = document.querySelectorAll('button[name="checkout"], [href*="/checkout"]');
+      checkoutBtns.forEach(btn => {
+        if (btn.tagName === 'A') {
+          btn.href = `/checkout?checkout[shipping_address][city]=${encodeURIComponent(city)}`;
+        } else {
+          btn.onclick = () => {
+            window.location.href = `/checkout?checkout[shipping_address][city]=${encodeURIComponent(city)}`;
+          };
+        }
+      });
+    } catch (err) {
+      console.error('Error guardando:', err);
+    }
+  }
+})();
+</script>
+{% endif %}

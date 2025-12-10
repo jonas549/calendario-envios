@@ -1,3 +1,13 @@
-name = "cart-calendar"
-type = "theme"
+api_version = "2025-01"
+
+[[extensions]]
+
 uid = "b19ce944-4682-8562-21cc-ac59d65663c3970cbe59"
+
+type = "theme"
+name = "Calendify Delivery"
+handle = "cart-calendar"
+
+[[extensions.targeting]]
+target = "body_end"
+module = "./snippets/app-embed.liquid"
