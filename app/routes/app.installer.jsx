@@ -1,132 +1,38 @@
 import { Page, Layout, Card, Button, Text, BlockStack, Banner, Box } from "@shopify/polaris";
-import { useActionData, useLoaderData, Form } from "react-router";
+import { useActionData, useLoaderData, Form, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 import { logger } from "../utils/logger.server";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 export const loader = async ({ request }) => {
   try {
-    const { admin, session } = await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const shop = session.shop;
 
-    logger.debug("installer", "Verificando scripts existentes", null, shop);
+    logger.debug("installer", "Verificando configuración", null, shop);
 
-    const query = `
-      query {
-        scriptTags(first: 50) {
-          edges {
-            node {
-              id
-              src
-            }
-          }
-        }
-      }
-    `;
+    // Verificar si ya tiene config inicial
+    const existingConfig = await prisma.config.findUnique({
+      where: { shop }
+    });
 
-    const response = await admin.graphql(query);
-    const data = await response.json();
-    
-    const hasScript = data.data.scriptTags.edges.some(edge => 
-      edge.node.src.includes('calendario-envios')
-    );
-
-    logger.debug("installer", `Scripts instalados: ${hasScript}`, null, shop);
-
-    return { hasScript, shop };
+    return { hasConfig: !!existingConfig, shop };
   } catch (error) {
     logger.error("installer", "Error en loader", {
       error: error.message,
       stack: error.stack
     });
-    return { hasScript: false, error: error.message };
+    return { hasConfig: false, error: error.message };
   }
 };
 
 export const action = async ({ request }) => {
   try {
-    const { admin, session } = await authenticate.admin(request);
+    const { session } = await authenticate.admin(request);
     const shop = session.shop;
 
-    logger.info("installer", "Iniciando instalación", null, shop);
-
-    const cartScriptUrl = `https://calendario-envios.vercel.app/api/script?shop=${encodeURIComponent(shop)}`;
-
-    // Obtener scripts existentes
-    const queryScripts = `
-      query {
-        scriptTags(first: 50) {
-          edges {
-            node {
-              id
-              src
-            }
-          }
-        }
-      }
-    `;
-
-    const getResponse = await admin.graphql(queryScripts);
-    const getData = await getResponse.json();
-
-    // Eliminar scripts antiguos
-    for (const edge of getData.data.scriptTags.edges) {
-      if (edge.node.src.includes('calendario-envios')) {
-        logger.info("installer", `Eliminando script: ${edge.node.id}`, null, shop);
-        
-        const deleteMutation = `
-          mutation scriptTagDelete($id: ID!) {
-            scriptTagDelete(id: $id) {
-              deletedScriptTagId
-            }
-          }
-        `;
-        
-        await admin.graphql(deleteMutation, {
-          variables: { id: edge.node.id }
-        });
-      }
-    }
-
-    // Crear nuevo script
-    logger.info("installer", "Creando nuevo script", null, shop);
-
-    const createMutation = `
-      mutation scriptTagCreate($input: ScriptTagInput!) {
-        scriptTagCreate(input: $input) {
-          scriptTag {
-            id
-            src
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `;
-
-    const createResponse = await admin.graphql(createMutation, {
-      variables: {
-        input: {
-          src: cartScriptUrl,
-          displayScope: "ONLINE_STORE"
-        }
-      }
-    });
-
-    const createData = await createResponse.json();
-
-    if (createData.data.scriptTagCreate.userErrors.length > 0) {
-      const errorMsg = createData.data.scriptTagCreate.userErrors[0].message;
-      logger.error("installer", "Error de GraphQL", { error: errorMsg }, shop);
-      
-      return {
-        success: false,
-        message: `Error: ${errorMsg}`
-      };
-    }
+    logger.info("installer", "Iniciando setup inicial", null, shop);
 
     // Crear config inicial si no existe
     const existingConfig = await prisma.config.findUnique({
@@ -145,19 +51,16 @@ export const action = async ({ request }) => {
       logger.info("installer", "Config inicial creada", null, shop);
     }
 
-    logger.info("installer", "Instalación completada", {
-      scriptId: createData.data.scriptTagCreate.scriptTag.id
-    }, shop);
+    logger.info("installer", "Setup completado", null, shop);
 
     return { 
       success: true, 
-      message: "✅ Calendario instalado correctamente. Ahora configura tus ciudades y feriados.",
-      scriptId: createData.data.scriptTagCreate.scriptTag.id,
-      scriptUrl: cartScriptUrl
+      message: "✅ Configuración inicial completada. Ahora activa el bloque en tu tema.",
+      redirect: true
     };
 
   } catch (error) {
-    logger.error("installer", "Error crítico en instalación", {
+    logger.error("installer", "Error crítico en setup", {
       error: error.message,
       stack: error.stack
     });
@@ -172,14 +75,24 @@ export const action = async ({ request }) => {
 export default function Installer() {
   const loaderData = useLoaderData();
   const actionData = useActionData();
+  const navigate = useNavigate();
   const [isInstalling, setIsInstalling] = useState(false);
 
-  const hasScript = loaderData?.hasScript || false;
-  const buttonText = hasScript ? "🔄 Reinstalar Calendario" : "🚀 Instalar Calendario";
+  // Redirect a onboarding después de setup exitoso
+  useEffect(() => {
+    if (actionData?.success && actionData?.redirect) {
+      setTimeout(() => {
+        navigate("/app/onboarding");
+      }, 1500);
+    }
+  }, [actionData, navigate]);
+
+  const hasConfig = loaderData?.hasConfig || false;
+  const buttonText = hasConfig ? "🔄 Reconfigurar" : "🚀 Comenzar Setup";
 
   return (
     <Page 
-      title="Instalador de Calendario"
+      title="Configuración Inicial"
       backAction={{ url: "/app" }}
     >
       <Layout>
@@ -188,9 +101,7 @@ export default function Installer() {
             <Banner status="success">
               <BlockStack gap="200">
                 <Text as="p" variant="headingMd">{actionData.message}</Text>
-                <Button url="/app/ciudades" variant="primary">
-                  Configurar Ciudades
-                </Button>
+                <Text as="p" tone="subdued">Redirigiendo a instrucciones de instalación...</Text>
               </BlockStack>
             </Banner>
           )}
@@ -198,11 +109,8 @@ export default function Installer() {
           {actionData?.success === false && (
             <Banner status="critical">
               <BlockStack gap="200">
-                <Text as="p" variant="headingMd">❌ Error en la instalación</Text>
+                <Text as="p" variant="headingMd">❌ Error en la configuración</Text>
                 <Text as="p">{actionData.message}</Text>
-                <Text as="p" tone="subdued">
-                  Si el problema persiste, contacta soporte con este mensaje.
-                </Text>
               </BlockStack>
             </Banner>
           )}
@@ -217,26 +125,25 @@ export default function Installer() {
             <BlockStack gap="500">
               <Box paddingBlockEnd="400">
                 <Text as="h2" variant="headingLg">
-                  {hasScript ? "🔄 Reinstalar Calendario" : "📅 Instalar Calendario de Envíos"}
+                  📅 Calendify Delivery - Setup Inicial
                 </Text>
               </Box>
 
-              {hasScript && (
+              {hasConfig && (
                 <Banner status="info">
                   <Text as="p">
-                    ℹ️ El calendario ya está instalado en tu tienda. Puedes reinstalarlo si hay problemas.
+                    ℹ️ La configuración ya está lista. Ve a onboarding para activar el bloque.
                   </Text>
                 </Banner>
               )}
 
               <Text as="p" variant="bodyLg">
-                {hasScript 
-                  ? "Reinstala el calendario para aplicar actualizaciones o resolver problemas."
-                  : "Instala el calendario interactivo en el carrito de tu tienda."
-                }
+                {hasConfig 
+                  ? "Tu app ya está configurada. Procede a activar el bloque en tu tema."
+                  : "Configura la base de datos y prepara tu app para usar el calendario."}
               </Text>
 
-              {!hasScript && (
+              {!hasConfig && (
                 <BlockStack gap="200">
                   <Text as="p" variant="headingMd">✨ Características:</Text>
                   <Text as="p">• Configuración de ciudades con horarios de corte</Text>
@@ -247,21 +154,32 @@ export default function Installer() {
               )}
 
               <Box paddingBlockStart="400">
-                <Form method="post" onSubmit={() => setIsInstalling(true)}>
-                  <Button 
-                    submit 
-                    variant="primary" 
-                    size="large"
-                    loading={isInstalling}
-                    disabled={isInstalling}
-                  >
-                    {isInstalling ? "Instalando..." : buttonText}
-                  </Button>
-                </Form>
+                <BlockStack gap="300">
+                  <Form method="post" onSubmit={() => setIsInstalling(true)}>
+                    <Button 
+                      submit 
+                      variant="primary" 
+                      size="large"
+                      loading={isInstalling}
+                      disabled={isInstalling}
+                    >
+                      {isInstalling ? "Configurando..." : buttonText}
+                    </Button>
+                  </Form>
+
+                  {hasConfig && (
+                    <Button 
+                      url="/app/onboarding"
+                      size="large"
+                    >
+                      Ver Instrucciones de Instalación
+                    </Button>
+                  )}
+                </BlockStack>
               </Box>
 
               <Text as="p" tone="subdued" variant="bodySm">
-                💡 Después de instalar, configura tus ciudades y feriados desde el menú lateral.
+                💡 Después del setup, seguirás las instrucciones para activar el bloque en tu tema.
               </Text>
             </BlockStack>
           </Card>

@@ -18,7 +18,7 @@ api_version = "2025-10"
   uri = "/webhooks/app/scopes_update"
 
 [access_scopes]
-scopes = "write_products,write_script_tags"
+scopes = "write_products"
 
 [auth]
 redirect_urls = [ 
@@ -29,3 +29,9 @@ redirect_urls = [
 url = "https://calendario-envios.vercel.app"
 subpath = "proxy"
 prefix = "apps"
+
+[extensions]
+embedded = true
+
+  [[extensions.development]]
+  root = "extensions/cart-calendar"
