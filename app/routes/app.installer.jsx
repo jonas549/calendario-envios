@@ -1,9 +1,9 @@
-import { Page, Layout, Card, Button, Text, BlockStack, Banner, Box } from "@shopify/polaris";
+import { Page, Layout, Card, Button, Text, BlockStack, Banner, Box, List } from "@shopify/polaris";
 import { useActionData, useLoaderData, Form, useNavigate } from "react-router";
 import { authenticate } from "../shopify.server";
 import { prisma } from "../db.server";
 import { logger } from "../utils/logger.server";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 export const loader = async ({ request }) => {
   try {
@@ -17,7 +17,14 @@ export const loader = async ({ request }) => {
       where: { shop }
     });
 
-    return { hasConfig: !!existingConfig, shop };
+    // URL del theme editor con deep link
+    const themeEditorUrl = `https://${shop}/admin/themes/current/editor?context=apps`;
+
+    return { 
+      hasConfig: !!existingConfig, 
+      shop,
+      themeEditorUrl 
+    };
   } catch (error) {
     logger.error("installer", "Error en loader", {
       error: error.message,
@@ -55,8 +62,8 @@ export const action = async ({ request }) => {
 
     return { 
       success: true, 
-      message: "✅ Configuración inicial completada. Ahora activa el bloque en tu tema.",
-      redirect: true
+      message: "✅ Configuración inicial completada.",
+      showOnboarding: true
     };
 
   } catch (error) {
@@ -78,35 +85,30 @@ export default function Installer() {
   const navigate = useNavigate();
   const [isInstalling, setIsInstalling] = useState(false);
 
-  // Redirect a onboarding después de setup exitoso
-  useEffect(() => {
-    if (actionData?.success && actionData?.redirect) {
-      const timer = setTimeout(() => {
-        navigate("/app/onboarding");
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [actionData, navigate]);
-
   const hasConfig = loaderData?.hasConfig || false;
-  const buttonText = hasConfig ? "🔄 Reconfigurar" : "🚀 Comenzar Setup";
+  const showOnboarding = actionData?.showOnboarding || hasConfig;
+  const themeEditorUrl = loaderData?.themeEditorUrl || "";
 
   return (
     <Page 
-      title="Configuración Inicial"
+      title={showOnboarding ? "¡Bienvenido a Calendify Delivery! 🎉" : "Configuración Inicial"}
       backAction={{ url: "/app" }}
+      primaryAction={showOnboarding ? {
+        content: "Abrir Editor de Temas",
+        url: themeEditorUrl,
+        external: true,
+      } : undefined}
     >
       <Layout>
         <Layout.Section>
+          {/* Banner de éxito después del setup */}
           {actionData?.success && (
             <Banner status="success">
-              <BlockStack gap="200">
-                <Text as="p" variant="headingMd">{actionData.message}</Text>
-                <Text as="p" tone="subdued">Redirigiendo a instrucciones de instalación...</Text>
-              </BlockStack>
+              <Text as="p" variant="headingMd">{actionData.message}</Text>
             </Banner>
           )}
           
+          {/* Banner de error */}
           {actionData?.success === false && (
             <Banner status="critical">
               <BlockStack gap="200">
@@ -116,35 +118,27 @@ export default function Installer() {
             </Banner>
           )}
 
+          {/* Banner de error en loader */}
           {loaderData?.error && (
             <Banner status="warning">
               <Text as="p">⚠️ No se pudo verificar el estado: {loaderData.error}</Text>
             </Banner>
           )}
 
-          <Card>
-            <BlockStack gap="500">
-              <Box paddingBlockEnd="400">
-                <Text as="h2" variant="headingLg">
-                  📅 Calendify Delivery - Setup Inicial
-                </Text>
-              </Box>
-
-              {hasConfig && (
-                <Banner status="info">
-                  <Text as="p">
-                    ℹ️ La configuración ya está lista. Ve a onboarding para activar el bloque.
+          {/* VISTA 1: Setup inicial (sin config) */}
+          {!showOnboarding && (
+            <Card>
+              <BlockStack gap="500">
+                <Box paddingBlockEnd="400">
+                  <Text as="h2" variant="headingLg">
+                    📅 Calendify Delivery - Setup Inicial
                   </Text>
-                </Banner>
-              )}
+                </Box>
 
-              <Text as="p" variant="bodyLg">
-                {hasConfig 
-                  ? "Tu app ya está configurada. Procede a activar el bloque en tu tema."
-                  : "Configura la base de datos y prepara tu app para usar el calendario."}
-              </Text>
+                <Text as="p" variant="bodyLg">
+                  Configura la base de datos y prepara tu app para usar el calendario.
+                </Text>
 
-              {!hasConfig && (
                 <BlockStack gap="200">
                   <Text as="p" variant="headingMd">✨ Características:</Text>
                   <Text as="p">• Configuración de ciudades con horarios de corte</Text>
@@ -152,10 +146,8 @@ export default function Installer() {
                   <Text as="p">• Calendario interactivo en el carrito</Text>
                   <Text as="p">• Fechas guardadas automáticamente en pedidos</Text>
                 </BlockStack>
-              )}
 
-              <Box paddingBlockStart="400">
-                <BlockStack gap="300">
+                <Box paddingBlockStart="400">
                   <Form method="post" onSubmit={() => setIsInstalling(true)}>
                     <Button 
                       submit 
@@ -164,26 +156,89 @@ export default function Installer() {
                       loading={isInstalling}
                       disabled={isInstalling}
                     >
-                      {isInstalling ? "Configurando..." : buttonText}
+                      {isInstalling ? "Configurando..." : "🚀 Comenzar Setup"}
                     </Button>
                   </Form>
+                </Box>
 
-                  {hasConfig && (
-                    <Button 
-                      onClick={() => navigate("/app/onboarding")}
-                      size="large"
-                    >
-                      Ver Instrucciones de Instalación
-                    </Button>
-                  )}
-                </BlockStack>
+                <Text as="p" tone="subdued" variant="bodySm">
+                  💡 Después del setup, seguirás las instrucciones para activar el bloque en tu tema.
+                </Text>
+              </BlockStack>
+            </Card>
+          )}
+
+          {/* VISTA 2: Onboarding (con config) */}
+          {showOnboarding && (
+            <>
+              <Banner status="info">
+                <Text as="p">
+                  Para que el calendario aparezca en tu carrito, necesitas activar el bloque en tu tema.
+                </Text>
+              </Banner>
+
+              <Box paddingBlockStart="400">
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingMd">
+                      📋 Instrucciones de instalación
+                    </Text>
+
+                    <List type="number">
+                      <List.Item>
+                        Haz clic en el botón <strong>"Abrir Editor de Temas"</strong> arriba
+                      </List.Item>
+                      <List.Item>
+                        En el editor, navega a la página del <strong>Carrito</strong> (Cart)
+                      </List.Item>
+                      <List.Item>
+                        En el panel izquierdo, busca la sección <strong>"Apps"</strong>
+                      </List.Item>
+                      <List.Item>
+                        Busca <strong>"Calendario de Entregas"</strong> y arrástralo a tu carrito
+                      </List.Item>
+                      <List.Item>
+                        Colócalo donde quieras que aparezca (recomendado: arriba del botón de pago)
+                      </List.Item>
+                      <List.Item>
+                        Haz clic en <strong>"Guardar"</strong> en la esquina superior derecha
+                      </List.Item>
+                    </List>
+
+                    <Banner status="success">
+                      <Text as="p">
+                        ¡Listo! El calendario ahora estará visible en tu tienda. 
+                        Regresa aquí para configurar ciudades y fechas de entrega.
+                      </Text>
+                    </Banner>
+
+                    <Box paddingBlockStart="400">
+                      <Button 
+                        onClick={() => navigate("/app")}
+                        variant="primary"
+                        size="large"
+                      >
+                        Ya lo activé, ir al Dashboard
+                      </Button>
+                    </Box>
+                  </BlockStack>
+                </Card>
               </Box>
 
-              <Text as="p" tone="subdued" variant="bodySm">
-                💡 Después del setup, seguirás las instrucciones para activar el bloque en tu tema.
-              </Text>
-            </BlockStack>
-          </Card>
+              <Box paddingBlockStart="400">
+                <Card>
+                  <BlockStack gap="400">
+                    <Text as="h2" variant="headingMd">
+                      🎥 Video tutorial
+                    </Text>
+                    <Text as="p" tone="subdued">
+                      Sigue los pasos arriba para activar el calendario en menos de 2 minutos.
+                    </Text>
+                  </BlockStack>
+                </Card>
+              </Box>
+            </>
+          )}
         </Layout.Section>
       </Layout>
     </Page>
