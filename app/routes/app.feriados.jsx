@@ -36,29 +36,31 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const action = formData.get("_action");
 
-  if (action === "create") {
-    const dateString = formData.get("date");
-    await prisma.holiday.create({
-      data: {
-        shop,
-        date: new Date(dateString + "T00:00:00.000Z"),
-        name: formData.get("name"),
-        active: formData.get("active") === "true",
-      },
-    });
-  }
+if (action === "create") {
+  const dateString = formData.get("date");
+  const [year, month, day] = dateString.split('-');
+  await prisma.holiday.create({
+    data: {
+      shop,
+      date: new Date(year, month - 1, day),
+      name: formData.get("name"),
+      active: formData.get("active") === "true",
+    },
+  });
+}
 
-  if (action === "update") {
-    const dateString = formData.get("date");
-    await prisma.holiday.update({
-      where: { id: formData.get("id") },
-      data: {
-        date: new Date(dateString + "T00:00:00.000Z"),
-        name: formData.get("name"),
-        active: formData.get("active") === "true",
-      },
-    });
-  }
+if (action === "update") {
+  const dateString = formData.get("date");
+  const [year, month, day] = dateString.split('-');
+  await prisma.holiday.update({
+    where: { id: formData.get("id") },
+    data: {
+      date: new Date(year, month - 1, day),
+      name: formData.get("name"),
+      active: formData.get("active") === "true",
+    },
+  });
+}
 
   if (action === "delete") {
     await prisma.holiday.delete({

@@ -395,10 +395,10 @@ const layoutHTML = \`
 })();
   `;
 
-  return new Response(scriptContent, {
-    headers: {
-      "Content-Type": "application/javascript",
-      "Cache-Control": "public, max-age=3600",
-    },
-  });
+return new Response(scriptContent, {
+  headers: {
+    "Content-Type": "application/javascript",
+    "Cache-Control": "no-cache, no-store, must-revalidate",
+  },
+});
 };
