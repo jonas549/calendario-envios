@@ -79,14 +79,14 @@ export default function Installer() {
   const [isInstalling, setIsInstalling] = useState(false);
 
   // Redirect a onboarding después de setup exitoso
-useEffect(() => {
-  if (actionData?.success && actionData?.redirect) {
-    const timer = setTimeout(() => {
-      window.location.href = "/app/onboarding";
-    }, 1500);
-    return () => clearTimeout(timer);
-  }
-}, [actionData]);
+  useEffect(() => {
+    if (actionData?.success && actionData?.redirect) {
+      const timer = setTimeout(() => {
+        navigate(`/app/onboarding${window.location.search}`);
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [actionData, navigate]);
 
   const hasConfig = loaderData?.hasConfig || false;
   const buttonText = hasConfig ? "🔄 Reconfigurar" : "🚀 Comenzar Setup";
