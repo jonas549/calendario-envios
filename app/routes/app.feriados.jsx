@@ -36,31 +36,31 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const action = formData.get("_action");
 
-if (action === "create") {
-  const dateString = formData.get("date");
-  const [year, month, day] = dateString.split('-');
-  await prisma.holiday.create({
-    data: {
-      shop,
-      date: new Date(year, month - 1, day),
-      name: formData.get("name"),
-      active: formData.get("active") === "true",
-    },
-  });
-}
+  if (action === "create") {
+    const dateString = formData.get("date");
+    const [year, month, day] = dateString.split('-');
+    await prisma.holiday.create({
+      data: {
+        shop,
+        date: new Date(year, month - 1, day),
+        name: formData.get("name"),
+        active: formData.get("active") === "true",
+      },
+    });
+  }
 
-if (action === "update") {
-  const dateString = formData.get("date");
-  const [year, month, day] = dateString.split('-');
-  await prisma.holiday.update({
-    where: { id: formData.get("id") },
-    data: {
-      date: new Date(year, month - 1, day),
-      name: formData.get("name"),
-      active: formData.get("active") === "true",
-    },
-  });
-}
+  if (action === "update") {
+    const dateString = formData.get("date");
+    const [year, month, day] = dateString.split('-');
+    await prisma.holiday.update({
+      where: { id: formData.get("id") },
+      data: {
+        date: new Date(year, month - 1, day),
+        name: formData.get("name"),
+        active: formData.get("active") === "true",
+      },
+    });
+  }
 
   if (action === "delete") {
     await prisma.holiday.delete({
@@ -93,7 +93,11 @@ export default function Feriados() {
   const openEditModal = (holiday) => {
     setEditingHoliday(holiday);
     setName(holiday.name);
-    setDate(new Date(holiday.date).toISOString().split('T')[0]);
+    const d = new Date(holiday.date);
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    setDate(`${year}-${month}-${day}`);
     setActive(holiday.active);
     setModalActive(true);
   };
@@ -120,19 +124,26 @@ export default function Feriados() {
     }
   };
 
-  const rows = holidays.map((holiday) => [
-    new Date(holiday.date).toLocaleDateString("es-ES"),
-    holiday.name,
-    holiday.active ? "✅ Activo" : "❌ Inactivo",
-    <ButtonGroup>
-      <Button onClick={() => openEditModal(holiday)} size="slim">
-        Editar
-      </Button>
-      <Button onClick={() => handleDelete(holiday.id)} tone="critical" size="slim">
-        Eliminar
-      </Button>
-    </ButtonGroup>
-  ]);
+  const rows = holidays.map((holiday) => {
+    const d = new Date(holiday.date);
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    
+    return [
+      `${day}/${month}/${year}`,
+      holiday.name,
+      holiday.active ? "✅ Activo" : "❌ Inactivo",
+      <ButtonGroup key={holiday.id}>
+        <Button onClick={() => openEditModal(holiday)} size="slim">
+          Editar
+        </Button>
+        <Button onClick={() => handleDelete(holiday.id)} tone="critical" size="slim">
+          Eliminar
+        </Button>
+      </ButtonGroup>
+    ];
+  });
 
   return (
     <Page
