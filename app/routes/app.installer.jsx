@@ -227,28 +227,31 @@ export default function Installer() {
         Sigue los pasos arriba para activar el calendario en menos de 2 minutos.
       </Text>
       
-      <div style={{ 
-        position: 'relative', 
-        paddingBottom: '56.25%', 
-        height: 0, 
-        overflow: 'hidden',
-        borderRadius: '8px'
-      }}>
-        <iframe
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            border: 0
-          }}
-          src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
-          title="Tutorial de instalación"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen
-        />
-      </div>
+            <div style={{ 
+  position: 'relative', 
+  paddingBottom: '56.25%', 
+  height: 0, 
+  overflow: 'hidden',
+  borderRadius: '8px',
+  background: '#000'
+}}>
+  <iframe
+    style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      border: 0
+    }}
+    src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
+    title="Tutorial de Calendify Delivery"
+    frameBorder="0"
+    loading="lazy"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen
+  />
+</div>
     </BlockStack>
   </Card>
 </Box>

@@ -54,15 +54,7 @@ export default function Index() {
                 </List.Item>
               </List>
 
-              <Box paddingBlockStart="400">
-                <Button 
-                  onClick={() => navigate("/app/installer")}
-                  variant="primary"
-                  size="large"
-                >
-                  Ir al Instalador
-                </Button>
-              </Box>
+           
             </BlockStack>
           </Card>
         </Layout.Section>
@@ -77,28 +69,31 @@ export default function Index() {
                 Mira este video para aprender a instalar y configurar Calendify Delivery en menos de 5 minutos.
               </Text>
               
-              <div style={{ 
-                position: 'relative', 
-                paddingBottom: '56.25%', 
-                height: 0, 
-                overflow: 'hidden',
-                borderRadius: '8px'
-              }}>
-                <iframe
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    border: 0
-                  }}
-                  src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
-                  title="Tutorial completo de Calendify Delivery"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-              </div>
+          <div style={{ 
+  position: 'relative', 
+  paddingBottom: '56.25%', 
+  height: 0, 
+  overflow: 'hidden',
+  borderRadius: '8px',
+  background: '#000'
+}}>
+  <iframe
+    style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100%',
+      height: '100%',
+      border: 0
+    }}
+    src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
+    title="Tutorial de Calendify Delivery"
+    frameBorder="0"
+    loading="lazy"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allowFullScreen
+  />
+</div>
             </BlockStack>
           </Card>
         </Layout.Section>
