@@ -69,7 +69,7 @@ export default function Index() {
                 Mira este video para aprender a instalar y configurar Calendify Delivery en menos de 5 minutos.
               </Text>
               
-          <div style={{ 
+<div style={{ 
   position: 'relative', 
   paddingBottom: '56.25%', 
   height: 0, 
@@ -86,11 +86,11 @@ export default function Index() {
       height: '100%',
       border: 0
     }}
-    src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
-    title="Tutorial de Calendify Delivery"
+    src="https://www.youtube-nocookie.com/embed/GYWJlrS0iIc"
+    title="Tutorial completo de Calendify Delivery"
     frameBorder="0"
-    loading="lazy"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+    referrerPolicy="strict-origin-when-cross-origin"
     allowFullScreen
   />
 </div>
