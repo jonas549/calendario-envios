@@ -235,22 +235,23 @@ export default function Installer() {
   borderRadius: '8px',
   background: '#000'
 }}>
-  <iframe
-    style={{
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      width: '100%',
-      height: '100%',
-      border: 0
-    }}
-    src="https://www.youtube.com/watch?v=GYWJlrS0iIc"
-    title="Tutorial de Calendify Delivery"
-    frameBorder="0"
-    loading="lazy"
-    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-    allowFullScreen
-  />
+<iframe
+  style={{
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    width: '100%',
+    height: '100%',
+    border: 0
+  }}
+  src="https://www.youtube-nocookie.com/embed/GYWJlrS0iIc"
+  title="Tutorial de Calendify Delivery"
+  frameBorder="0"
+  loading="lazy"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+  referrerPolicy="strict-origin-when-cross-origin"
+  allowFullScreen
+/>
 </div>
     </BlockStack>
   </Card>
