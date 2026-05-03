@@ -4,8 +4,71 @@
   El merchant lo arrastra desde Personalizar tema → Apps.
 {% endcomment %}
 
-{% assign wid   = block.id | remove: '-' %}
-{% assign shop_domain = shop.permanent_domain %}
+{% assign wid = block.id | remove: '-' %}
+
+<style>
+  #ce-widget-{{ wid }} .ce-date-trigger {
+    display: flex;
+    align-items: center;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    background: #fff;
+    transition: border-color 0.2s;
+    user-select: none;
+  }
+  #ce-widget-{{ wid }} .ce-date-trigger:hover { border-color: #555; }
+  #ce-widget-{{ wid }} .ce-date-trigger.ce-open { border-color: #0066cc; }
+  #ce-widget-{{ wid }} .ce-date-display {
+    flex: 1;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: #333;
+  }
+  #ce-widget-{{ wid }} .ce-date-display.ce-placeholder { color: #aaa; }
+  #ce-widget-{{ wid }} .ce-cal-arrow {
+    padding: 10px 12px;
+    color: #888;
+    font-size: 11px;
+  }
+  #ce-widget-{{ wid }} .ce-cal-panel {
+    border: 1px solid #e0e0e0;
+    border-top: none;
+    border-radius: 0 0 4px 4px;
+    overflow: hidden;
+    background: #fff;
+  }
+  #ce-widget-{{ wid }} .ce-message {
+    padding: 11px 14px;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-top: 10px;
+    border-left: 4px solid transparent;
+    display: none;
+  }
+  #ce-widget-{{ wid }} .ce-message.ce-success {
+    background: #e8f5e9;
+    color: #1b5e20;
+    border-left-color: #43a047;
+    font-weight: 600;
+    font-size: 15px;
+  }
+  #ce-widget-{{ wid }} .ce-message.ce-warning {
+    background: #fff3cd;
+    color: #856404;
+    border-left-color: #ffc107;
+  }
+  #ce-widget-{{ wid }} .ce-message.ce-error {
+    background: #ffebee;
+    color: #c62828;
+    border-left-color: #ef5350;
+  }
+  #ce-widget-{{ wid }} .ce-message.ce-loading {
+    background: #f0f0f0;
+    color: #555;
+    border-left-color: #ccc;
+  }
+</style>
 
 <div id="ce-widget-{{ wid }}" class="ce-wrapper">
 
@@ -25,6 +88,7 @@
 
   <!-- Sección de entrega a domicilio -->
   <div id="ce-delivery-{{ wid }}" class="ce-fields">
+
     <div class="ce-field">
       <label for="ce-city-{{ wid }}">Ciudad</label>
       <select id="ce-city-{{ wid }}">
@@ -32,15 +96,24 @@
       </select>
     </div>
 
+    <!-- Selector de fecha: trigger clickeable + panel colapsable -->
     <div id="ce-date-wrapper-{{ wid }}" class="ce-field" style="display: none;">
-      <label for="ce-date-{{ wid }}">Fecha de entrega</label>
-      <input type="text" id="ce-date-{{ wid }}" readonly
-        placeholder="Selecciona una ciudad primero">
+      <label>Fecha de entrega</label>
+      <!-- Trigger clickeable que muestra la fecha seleccionada -->
+      <div id="ce-date-trigger-{{ wid }}" class="ce-date-trigger" role="button" tabindex="0" aria-expanded="false">
+        <span id="ce-date-display-{{ wid }}" class="ce-date-display ce-placeholder">Toca para ver fechas disponibles</span>
+        <span id="ce-cal-arrow-{{ wid }}" class="ce-cal-arrow">&#9660;</span>
+      </div>
+      <!-- Input oculto que usa flatpickr internamente -->
+      <input type="text" id="ce-date-{{ wid }}" style="display: none;" aria-hidden="true">
+      <!-- Panel colapsable del calendario inline -->
+      <div id="ce-cal-panel-{{ wid }}" class="ce-cal-panel" style="display: none;"></div>
     </div>
+
   </div>
 
   <!-- Mensaje de estado -->
-  <div id="ce-msg-{{ wid }}" class="ce-message" style="display: none;"></div>
+  <div id="ce-msg-{{ wid }}" class="ce-message"></div>
 
 </div>
 
@@ -54,30 +127,63 @@
   var WID  = {{ wid | json }};
   var LSK  = 'ce_' + SHOP.replace(/\./g, '_');
 
-  var appConfig       = {};
-  var fpInstance      = null;
+  var appConfig        = {};
+  var fpInstance       = null;
   var deliverySelected = false;
   var pickupSelected   = false;
 
   // ── Helpers ───────────────────────────────────────────────────
-  function $w(name) {
-    return document.getElementById('ce-' + name + '-' + WID);
-  }
+  function $w(name) { return document.getElementById('ce-' + name + '-' + WID); }
 
   function showMsg(text, type) {
     var el = $w('msg');
     if (!el) return;
-    el.textContent  = text;
+    el.textContent = text;
+    el.className   = 'ce-message ce-' + (type || 'loading');
     el.style.display = 'block';
-    var map = {
-      success: { bg: '#e8f5e9', color: '#2e7d32' },
-      warning: { bg: '#fff3cd', color: '#856404' },
-      error:   { bg: '#ffebee', color: '#c62828' },
-      loading: { bg: '#f0f0f0', color: '#555'    },
-    };
-    var s = map[type] || map.loading;
-    el.style.background = s.bg;
-    el.style.color      = s.color;
+  }
+
+  // ── Calendar panel ─────────────────────────────────────────────
+  function openCalPanel() {
+    var panel   = document.getElementById('ce-cal-panel-'   + WID);
+    var trigger = document.getElementById('ce-date-trigger-' + WID);
+    var arrow   = document.getElementById('ce-cal-arrow-'   + WID);
+    if (panel)   panel.style.display = 'block';
+    if (trigger) { trigger.classList.add('ce-open'); trigger.setAttribute('aria-expanded', 'true'); }
+    if (arrow)   arrow.innerHTML = '&#9650;';
+    console.log('[Calendify-Debug] calendario ABIERTO');
+  }
+
+  function closeCalPanel() {
+    var panel   = document.getElementById('ce-cal-panel-'   + WID);
+    var trigger = document.getElementById('ce-date-trigger-' + WID);
+    var arrow   = document.getElementById('ce-cal-arrow-'   + WID);
+    if (panel)   panel.style.display = 'none';
+    if (trigger) { trigger.classList.remove('ce-open'); trigger.setAttribute('aria-expanded', 'false'); }
+    if (arrow)   arrow.innerHTML = '&#9660;';
+    console.log('[Calendify-Debug] calendario CERRADO');
+  }
+
+  function toggleCalPanel() {
+    var panel = document.getElementById('ce-cal-panel-' + WID);
+    if (!panel) return;
+    if (panel.style.display === 'none' || !panel.style.display) {
+      openCalPanel();
+    } else {
+      closeCalPanel();
+    }
+  }
+
+  function updateDateDisplay(dateStr) {
+    var el = document.getElementById('ce-date-display-' + WID);
+    if (!el) return;
+    if (dateStr) {
+      el.textContent = dateStr;
+      el.classList.remove('ce-placeholder');
+    } else {
+      el.textContent = 'Toca para ver fechas disponibles';
+      el.classList.add('ce-placeholder');
+    }
   }
 
   // ── Boot ─────────────────────────────────────────────────────
@@ -90,6 +196,14 @@
   function boot() {
     loadConfig();
     setupCheckoutInterception();
+
+    var trigger = document.getElementById('ce-date-trigger-' + WID);
+    if (trigger) {
+      trigger.addEventListener('click', toggleCalPanel);
+      trigger.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleCalPanel(); }
+      });
+    }
   }
 
   // ── Load cities + config ──────────────────────────────────────
@@ -100,8 +214,8 @@
       if (!data.success) return;
 
       populateCities(data.cities || []);
-      appConfig = data.config || {};
-      window.__ceCfg = appConfig; // expose for interception
+      appConfig       = data.config || {};
+      window.__ceCfg  = appConfig;
 
       applyPickupConfig();
       $w('city').addEventListener('change', onCityChange);
@@ -115,8 +229,8 @@
   function populateCities(cities) {
     var select = $w('city');
     cities.forEach(function(city) {
-      var opt       = document.createElement('option');
-      opt.value     = city.name;
+      var opt         = document.createElement('option');
+      opt.value       = city.name;
       opt.textContent = city.name;
       select.appendChild(opt);
     });
@@ -134,9 +248,7 @@
 
     var checkbox = document.getElementById('ce-pickup-' + WID);
     if (checkbox) {
-      checkbox.addEventListener('change', function(e) {
-        applyPickupState(e.target.checked);
-      });
+      checkbox.addEventListener('change', function(e) { applyPickupState(e.target.checked); });
       if (localStorage.getItem(LSK + '_pickup') === 'true') {
         checkbox.checked = true;
         applyPickupState(true);
@@ -168,9 +280,11 @@
     if (!city) {
       if (fpInstance) { fpInstance.destroy(); fpInstance = null; }
       document.getElementById('ce-date-wrapper-' + WID).style.display = 'none';
+      closeCalPanel();
+      updateDateDisplay(null);
       localStorage.removeItem(LSK + '_city');
       localStorage.removeItem(LSK + '_date');
-      deliverySelected = false;
+      deliverySelected    = false;
       $w('msg').style.display = 'none';
       notifyState();
       return;
@@ -189,7 +303,8 @@
         document.getElementById('ce-date-wrapper-' + WID).style.display = 'block';
         initFlatpickr(city, data.availableDates);
       } else {
-        document.getElementById('ce-date-wrapper-' + WID).style.display = 'none';
+        document.getElementById('ce-date-wrapper-' + WID).style.display = 'block';
+        closeCalPanel();
         showMsg('⚠️ No hay fechas disponibles para esta ciudad', 'warning');
       }
     } catch (err) {
@@ -202,11 +317,12 @@
     loadFlatpickrLib(function() {
       if (fpInstance) fpInstance.destroy();
 
-      var savedCity = localStorage.getItem(LSK + '_city');
-      var savedDate = localStorage.getItem(LSK + '_date');
+      var savedCity   = localStorage.getItem(LSK + '_city');
+      var savedDate   = localStorage.getItem(LSK + '_date');
       var defaultDate = (savedCity === city && savedDate && availableDates.includes(savedDate))
-        ? savedDate
-        : null;
+        ? savedDate : null;
+
+      var calPanel = document.getElementById('ce-cal-panel-' + WID);
 
       fpInstance = flatpickr('#ce-date-' + WID, {
         locale:      'es',
@@ -214,17 +330,20 @@
         minDate:     availableDates[0],
         enable:      availableDates,
         inline:      true,
+        appendTo:    calPanel,
         defaultDate: defaultDate,
-        onChange: function(dates, dateStr) {
-          onDateSelected(city, dateStr);
-        },
+        onChange:    function(dates, dateStr) { onDateSelected(city, dateStr); },
       });
 
       if (defaultDate) {
-        // Pre-selected date already restored
+        // Selección restaurada: mostrar fecha en trigger, mantener cerrado
+        updateDateDisplay(defaultDate);
+        closeCalPanel();
         onDateSelected(city, defaultDate);
       } else {
-        showMsg('✅ ' + availableDates.length + ' fecha(s) disponible(s)', 'success');
+        // Primera selección de esta ciudad: abrir automáticamente
+        openCalPanel();
+        showMsg('✅ ' + availableDates.length + ' fecha(s) disponible(s) — elige una', 'success');
       }
     });
   }
@@ -232,25 +351,19 @@
   function loadFlatpickrLib(callback) {
     if (window.__ceFpReady) { callback(); return; }
     if (window.__ceFpLoading) {
-      var t = setInterval(function() {
-        if (window.__ceFpReady) { clearInterval(t); callback(); }
-      }, 50);
+      var t = setInterval(function() { if (window.__ceFpReady) { clearInterval(t); callback(); } }, 50);
       return;
     }
     window.__ceFpLoading = true;
 
     if (!document.querySelector('link[href*="flatpickr"]')) {
-      var css = document.createElement('link');
+      var css  = document.createElement('link');
       css.rel  = 'stylesheet';
       css.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
       document.head.appendChild(css);
     }
 
-    if (typeof flatpickr !== 'undefined') {
-      window.__ceFpReady = true;
-      callback();
-      return;
-    }
+    if (typeof flatpickr !== 'undefined') { window.__ceFpReady = true; callback(); return; }
 
     var s1 = document.createElement('script');
     s1.src    = 'https://cdn.jsdelivr.net/npm/flatpickr';
@@ -269,8 +382,11 @@
     localStorage.setItem(LSK + '_date', dateStr);
     updateCartAttributes({ delivery_city: city, delivery_date: dateStr, delivery_type: 'delivery' });
     deliverySelected = true;
+    updateDateDisplay(dateStr);
+    closeCalPanel();
     showMsg('✅ Entrega: ' + city + ' · ' + dateStr, 'success');
     notifyState();
+    console.log('[Calendify-Debug] fecha seleccionada – city:', city, '| date:', dateStr);
   }
 
   // ── Cart attributes ───────────────────────────────────────────
@@ -281,9 +397,7 @@
         fd.append('attributes[' + pair[0] + ']', pair[1]);
       });
       await fetch('/cart/update.js', { method: 'POST', body: fd });
-    } catch (_) {
-      // localStorage is the fallback; cart update failure is non-blocking
-    }
+    } catch (_) {}
   }
 
   // ── Restore selection ─────────────────────────────────────────
@@ -294,40 +408,33 @@
     var select  = $w('city');
     var options = Array.from(select.options);
     var match   = options.find(function(o) { return o.value === savedCity; });
-    if (match) {
-      select.value = savedCity;
-      onCityChange();
-    }
+    if (match) { select.value = savedCity; onCityChange(); }
   }
 
   async function restoreFromCartAttributes() {
     try {
-      var res  = await fetch('/cart.js');
-      var cart = await res.json();
+      var res   = await fetch('/cart.js');
+      var cart  = await res.json();
       var attrs = cart.attributes || {};
       if (attrs.delivery_city) {
         localStorage.setItem(LSK + '_city', attrs.delivery_city);
-        if (attrs.delivery_date) {
-          localStorage.setItem(LSK + '_date', attrs.delivery_date);
-        }
+        if (attrs.delivery_date) localStorage.setItem(LSK + '_date', attrs.delivery_date);
         restoreFromLocalStorage();
       }
     } catch (_) {}
   }
 
-  // ── Checkout interception (Fase 4) ────────────────────────────
+  // ── Checkout interception ─────────────────────────────────────
   function setupCheckoutInterception() {
-    // Register only once per page across multiple block instances
     if (window.__ceInterceptor) return;
     window.__ceInterceptor = true;
 
-    document.addEventListener('submit', onFormSubmit,    true);
-    document.addEventListener('click',  onLinkClick,     true);
-    // Capture-phase listener at document level fires BEFORE any element-level
-    // handler (including shopify-buy-it-now-button's connectedCallback handler)
+    document.addEventListener('submit', onFormSubmit,     true);
+    document.addEventListener('click',  onLinkClick,      true);
+    // Capture-phase en document: dispara ANTES que cualquier handler en el
+    // elemento (incluido el connectedCallback de shopify-buy-it-now-button)
     document.addEventListener('click',  onCustomBtnClick, true);
 
-    // MutationObserver: marks custom-class buttons as known on DOM changes
     var mo = new MutationObserver(attachCustomClassListeners);
     mo.observe(document.body, { childList: true, subtree: true });
   }
@@ -362,7 +469,6 @@
       alertAndScroll();
       return;
     }
-
     injectCityIntoForm(form);
   }
 
@@ -401,7 +507,7 @@
     }
   }
 
-  // ── Custom-class button interception (Buy it now / template buttons) ──
+  // ── Custom-class button interception (Buy it now / botones de tema) ──
   function getInterceptedClasses() {
     var cfg = window.__ceCfg || {};
     var raw = cfg.checkoutButtonClasses || '';
@@ -418,7 +524,6 @@
     var classes = getInterceptedClasses();
     if (!classes.length) return;
 
-    // Find the closest ancestor (or self) matching any intercepted class
     var btn = null;
     for (var i = 0; i < classes.length; i++) {
       try {
@@ -428,53 +533,53 @@
     }
     if (!btn) return;
 
-    // Second pass of a re-triggered click after cart-attr flush
-    if (btn.dataset.ceBypassing) {
-      console.log('[Calendify] bypass activo – click pasa a Shopify');
-      delete btn.dataset.ceBypassing;
-      return;
-    }
-
-    console.log('[Calendify] click capturado (document-capture) btn:', btn.className);
-    console.log('[Calendify] localStorage city:', localStorage.getItem(LSK + '_city'),
+    console.log('[Calendify-Debug] click capturado (document-capture) btn:', btn.className);
+    console.log('[Calendify-Debug] localStorage city:', localStorage.getItem(LSK + '_city'),
                 '| date:', localStorage.getItem(LSK + '_date'));
-    console.log('[Calendify] deliverySelected:', deliverySelected, '| pickupSelected:', pickupSelected);
+    console.log('[Calendify-Debug] deliverySelected:', deliverySelected,
+                '| pickupSelected:', pickupSelected,
+                '| canCheckout():', canCheckout());
 
     if (!canCheckout()) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      console.log('[Calendify] checkout bloqueado – sin ciudad/fecha seleccionada');
+      console.log('[Calendify-Debug] checkout BLOQUEADO – sin ciudad/fecha seleccionada');
       alertAndScroll();
       return;
     }
 
-    // Stop this click so shopify-buy-it-now-button never sees it.
-    // We re-dispatch after the cart-attr flush completes.
+    // Detener el click: shopify-buy-it-now-button no lo recibe.
+    // En su lugar redirigimos a /checkout con la ciudad en la URL,
+    // exactamente como hacía el legacy api.script.js.
     e.stopPropagation();
     e.stopImmediatePropagation();
 
     var city = !pickupSelected ? (localStorage.getItem(LSK + '_city') || '') : '';
     var date = !pickupSelected ? (localStorage.getItem(LSK + '_date') || '') : '';
 
-    console.log('[Calendify] flush cart attrs – city:', city, '| date:', date);
+    console.log('[Calendify-Debug] flush cart attrs – city:', city, '| date:', date);
 
     var fd = new FormData();
-    fd.append('attributes[delivery_type]',  pickupSelected ? 'pickup' : 'delivery');
-    fd.append('attributes[delivery_city]',  city);
-    fd.append('attributes[delivery_date]',  date);
+    fd.append('attributes[delivery_type]', pickupSelected ? 'pickup' : 'delivery');
+    fd.append('attributes[delivery_city]', city);
+    fd.append('attributes[delivery_date]', date);
 
     fetch('/cart/update.js', { method: 'POST', body: fd })
       .then(function(res) {
-        console.log('[Calendify] cart attrs guardados – status:', res.status);
+        console.log('[Calendify-Debug] cart attrs guardados – HTTP', res.status);
       })
       .catch(function(err) {
-        console.warn('[Calendify] error guardando cart attrs:', err);
+        console.warn('[Calendify-Debug] error guardando cart attrs:', err);
       })
       .finally(function() {
-        console.log('[Calendify] re-disparando click → Shopify procesa checkout');
-        btn.dataset.ceBypassing = '1';
-        btn.click();
+        // Redirigir a checkout con ciudad en la URL del shipping address
+        // (misma estrategia que el legacy api.script.js)
+        var checkoutUrl = pickupSelected
+          ? '/checkout'
+          : '/checkout?checkout[shipping_address][city]=' + encodeURIComponent(city);
+        console.log('[Calendify-Debug] redirigiendo a:', checkoutUrl);
+        window.location.href = checkoutUrl;
       });
   }
 
@@ -484,12 +589,12 @@
       document.querySelectorAll('.' + CSS.escape(cls)).forEach(function(btn) {
         if (btn.dataset.ceIntercepted) return;
         btn.dataset.ceIntercepted = '1';
-        console.log('[Calendify] botón marcado para interceptación:', btn.className);
+        console.log('[Calendify-Debug] botón marcado para interceptación:', btn.className);
       });
     });
   }
 
-  // ── Global state for multi-widget coordination ─────────────────
+  // ── Global state ───────────────────────────────────────────────
   function notifyState() {
     window.__ceReady = deliverySelected || pickupSelected;
   }
