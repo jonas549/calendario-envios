@@ -132,6 +132,18 @@
 
   // ── Listeners de interceptación ────────────────────────────────
 
+  // Detecta si un elemento es un botón de tipo "Buy it now" / accelerated checkout.
+  // Estos botones crean un checkout aislado del cart principal (shadow DOM / web component),
+  // por lo que redirigir a /checkout puede fallar si el cart regular está vacío.
+  function isBuyItNowBtn(btn) {
+    var tag = btn.tagName.toLowerCase();
+    return tag === 'shopify-buy-it-now-button' ||
+           tag === 'shopify-payment-button'    ||
+           !!btn.closest('shopify-buy-it-now-button') ||
+           !!btn.closest('shopify-payment-button')    ||
+           btn.classList.contains('shopify-payment-button__button');
+  }
+
   function onCustomBtnClick(e) {
     if (window.__ceSelectionMode) return;
 
@@ -144,6 +156,21 @@
       } catch (_) {}
     }
     if (!btn) return;
+
+    // ── Caso especial: Buy it now + pickup ────────────────────────
+    // Buy it now crea un checkout aislado del cart principal.
+    // Si redirigimos manualmente a /checkout con el cart vacío → Shopify → HOME.
+    // Para pickup no necesitamos inyectar ciudad, así que dejamos el flujo nativo
+    // y solo guardamos delivery_type=pickup en cart attrs (best-effort).
+    if (isBuyItNowBtn(btn) && isPickup()) {
+      console.log('[Calendify Embed] Buy it now + pickup: flujo nativo, attrs en background');
+      var fdBin = new FormData();
+      fdBin.append('attributes[delivery_type]', 'pickup');
+      fdBin.append('attributes[delivery_city]', '');
+      fdBin.append('attributes[delivery_date]', '');
+      fetch('/cart/update.js', { method: 'POST', body: fdBin }).catch(function() {});
+      return; // Sin preventDefault → el web component sigue su flujo nativo
+    }
 
     e.preventDefault();
     e.stopPropagation();
