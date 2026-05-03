@@ -481,17 +481,53 @@ var CE_AUTO_SELECTORS = [
   }
 
   function onFormSubmit(e) {
-    var form   = e.target;
-    var action = (form.action || '').toLowerCase();
-    var hasBtn = form.querySelector('[name="checkout"]');
+    var form      = e.target;
+    var action    = (form.action || '').toLowerCase();
+    var submitter = e.submitter;
+
+    // form.querySelector solo encuentra hijos DOM del form.
+    // Botones con form="cart" fuera del form DOM no son hijos → usar e.submitter.
+    var hasBtn = form.querySelector('[name="checkout"]') ||
+                 (submitter && submitter.name === 'checkout');
+
+    console.log('[Calendify-Debug] submit event – action:', action,
+                '| submitter:', submitter && ('#' + submitter.id), submitter && submitter.name,
+                '| hasBtn:', !!hasBtn);
+
     if (!action.includes('/checkout') && !hasBtn) return;
 
     if (!canCheckout()) {
       e.preventDefault();
       e.stopPropagation();
+      console.log('[Calendify-Debug] submit BLOQUEADO – sin selección');
       alertAndScroll();
       return;
     }
+
+    // Si el submit viene de un botón name="checkout" (que asocia el form via form="cart"),
+    // el form action es /cart — no funciona inyectar un hidden field.
+    // Hay que prevenir el submit nativo y redirigir manualmente a /checkout.
+    if (submitter && submitter.name === 'checkout') {
+      e.preventDefault();
+      e.stopPropagation();
+      var city2 = !pickupSelected ? (localStorage.getItem(LSK + '_city') || '') : '';
+      var date2 = !pickupSelected ? (localStorage.getItem(LSK + '_date') || '') : '';
+      console.log('[Calendify-Debug] submit checkout redirect – city:', city2, '| date:', date2);
+      var fd2 = new FormData();
+      fd2.append('attributes[delivery_type]', pickupSelected ? 'pickup' : 'delivery');
+      fd2.append('attributes[delivery_city]', city2);
+      fd2.append('attributes[delivery_date]', date2);
+      fetch('/cart/update.js', { method: 'POST', body: fd2 }).finally(function() {
+        var url2 = pickupSelected
+          ? '/checkout'
+          : '/checkout?checkout[shipping_address][city]=' + encodeURIComponent(city2);
+        console.log('[Calendify-Debug] submit redirect →', url2);
+        window.location.href = url2;
+      });
+      return;
+    }
+
+    // Para forms cuyo action ya apunta a /checkout, inyectar ciudad como campo oculto
     injectCityIntoForm(form);
   }
 
@@ -582,7 +618,8 @@ var CE_AUTO_SELECTORS = [
     e.stopPropagation();
     e.stopImmediatePropagation();
 
-    console.log('[Calendify-Debug] click capturado (document-capture) btn:', btn.tagName, btn.className);
+    console.log('[Calendify-Debug] click capturado (document-capture) btn:', btn.tagName,
+                '#' + btn.id, 'name=' + btn.name, btn.className);
     console.log('[Calendify-Debug] localStorage city:', localStorage.getItem(LSK + '_city'),
                 '| date:', localStorage.getItem(LSK + '_date'));
     console.log('[Calendify-Debug] deliverySelected:', deliverySelected,
