@@ -73,14 +73,27 @@
   }
 
   function isPickup() {
-    // Usa OR: si cualquiera de las dos fuentes dice pickup, es pickup.
-    // Necesario por race condition: window.__ceState puede estar temporalmente
-    // desactualizado si restoreFromCartAttributes() corre tras applyPickupState().
-    var statePickup = window.__ceState ? !!window.__ceState.pickup : false;
-    var lsPickup    = localStorage.getItem(LSK + '_pickup') === 'true';
-    var result      = statePickup || lsPickup;
-    console.log('[Calendify Embed] isPickup – __ceState:', statePickup, '| localStorage:', lsPickup, '→', result);
-    return result;
+    var ss = sessionStorage.getItem(LSK + '_pickup');
+
+    if (window.__ceState) {
+      // App Block en esta página → autoritativo.
+      // OR con sessionStorage cubre la race condition transitoria de init.
+      var result = !!window.__ceState.pickup || ss === 'true';
+      console.log('[Calendify Embed] isPickup – __ceState:', !!window.__ceState.pickup,
+                  '| sessionStorage:', ss, '→', result);
+      return result;
+    }
+
+    // Sin App Block (página de producto): sessionStorage primero (fresco, esta sesión)
+    if (ss !== null) {
+      console.log('[Calendify Embed] isPickup – sessionStorage:', ss, '→', ss === 'true');
+      return ss === 'true';
+    }
+
+    // Último recurso: localStorage (puede ser stale entre sesiones)
+    var ls = localStorage.getItem(LSK + '_pickup') === 'true';
+    console.log('[Calendify Embed] isPickup – localStorage:', ls);
+    return ls;
   }
 
   function getCity() {

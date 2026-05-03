@@ -265,11 +265,13 @@
 
     if (checked) {
       localStorage.setItem(LSK + '_pickup', 'true');
+      sessionStorage.setItem(LSK + '_pickup', 'true');
       localStorage.removeItem(LSK + '_city');
       localStorage.removeItem(LSK + '_date');
       updateCartAttributes({ delivery_type: 'pickup', delivery_city: '', delivery_date: '' });
     } else {
       localStorage.removeItem(LSK + '_pickup');
+      sessionStorage.setItem(LSK + '_pickup', 'false');
       updateCartAttributes({ delivery_type: 'delivery' });
     }
     notifyState();
