@@ -1,20 +1,39 @@
 {% comment %}
-  App Embed — target: body — se inyecta en TODAS las páginas del tema.
-  Aparece como toggle en Theme Editor → App embeds → "Calendify Delivery".
-  Solo contiene el modo selección visual (?ce_select_mode=1).
-  El widget de entrega (calendario, ciudad, pickup) vive en calendar-widget.liquid.
+  App Embed — target: body — inyectado en TODAS las páginas del tema.
+  Modo selección visual persistente entre páginas (?ce_select_mode=1 activa,
+  sessionStorage mantiene el modo y las selecciones mientras el merchant navega).
 {% endcomment %}
 <script>
 (function() {
   'use strict';
 
-  var u = new URL(window.location.href);
-  if (u.searchParams.get('ce_select_mode') !== '1') return;
+  // ── sessionStorage keys ───────────────────────────────────────
+  var SS_MODE  = 'ce_sel_active';   // '1' cuando el modo está activo
+  var SS_SELS  = 'ce_sel_sels';     // JSON array de selectores acumulados
+  var SS_INTRO = 'ce_sel_intro';    // '1' después de mostrar el tooltip inicial
 
-  // Marcar globalmente para que el App Block no intercepte clicks durante este modo
+  // Activar por URL param o por sessionStorage (navegación entre páginas)
+  var urlMode = new URL(window.location.href).searchParams.get('ce_select_mode') === '1';
+  var ssMode  = sessionStorage.getItem(SS_MODE) === '1';
+
+  if (!urlMode && !ssMode) return;
+
+  // Persistir el modo en sessionStorage
+  sessionStorage.setItem(SS_MODE, '1');
+
+  // Bloquear interceptación del App Block durante este modo
   window.__ceSelectionMode = true;
 
   var SHOP = {{ shop.permanent_domain | json }};
+
+  // Cargar selecciones previas (de páginas anteriores en esta sesión)
+  var selected;
+  try { selected = JSON.parse(sessionStorage.getItem(SS_SELS) || '[]'); }
+  catch (_) { selected = []; }
+
+  function persistSelected() {
+    sessionStorage.setItem(SS_SELS, JSON.stringify(selected));
+  }
 
   var CE_SELECTORS = [
     '[name="checkout"]',
@@ -36,63 +55,84 @@
     'a[href="/checkout"]',
   ];
 
-  var selected = [];
-
   // ── Estilos ────────────────────────────────────────────────────
   var style = document.createElement('style');
   style.textContent = [
     '@keyframes ce-pulse{',
-      '0%,100%{box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 6px rgba(255,153,0,.2)}',
-      '50%{box-shadow:0 0 0 4px rgba(255,100,0,.9),0 0 0 10px rgba(255,100,0,.08)}',
+      '0%,100%{box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 7px rgba(255,153,0,.2)}',
+      '50%{box-shadow:0 0 0 4px rgba(255,100,0,1),0 0 0 11px rgba(255,100,0,.07)}',
     '}',
+    /* Barra superior */
     '#ce-sel-bar{',
       'position:fixed;top:0;left:0;right:0;z-index:2147483647;',
       'background:linear-gradient(135deg,#e65c00 0%,#ff9900 100%);',
-      'color:#fff;padding:0 16px;min-height:56px;',
-      'display:flex;align-items:center;gap:12px;flex-wrap:wrap;',
+      'color:#fff;padding:8px 14px;',
+      'display:flex;align-items:center;gap:10px;flex-wrap:wrap;',
       'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,sans-serif;',
-      'font-size:13px;box-shadow:0 4px 16px rgba(230,92,0,.5);}',
-    '#ce-sel-bar .ce-title{font-size:15px;font-weight:800;white-space:nowrap;letter-spacing:-.2px;}',
-    '#ce-sel-bar .ce-hint{flex:1;font-size:12px;opacity:.9;min-width:160px;}',
-    '#ce-sel-count{background:rgba(0,0,0,.2);border-radius:20px;padding:4px 14px;',
-      'font-weight:700;white-space:nowrap;font-size:13px;}',
-    '.ce-act{border:none;border-radius:6px;padding:9px 20px;',
-      'cursor:pointer;font-size:13px;font-weight:700;transition:opacity .15s;}',
-    '#ce-btn-save{background:#fff;color:#c85000;}',
-    '#ce-btn-save:hover:not(:disabled){background:#f5f5f5;}',
-    '#ce-btn-save:disabled{opacity:.45;cursor:not-allowed;}',
-    '#ce-btn-cancel{background:transparent;color:#fff;',
-      'border:1.5px solid rgba(255,255,255,.65) !important;}',
-    '#ce-btn-cancel:hover{background:rgba(255,255,255,.15);}',
+      'font-size:13px;box-shadow:0 4px 16px rgba(230,92,0,.55);min-height:52px;}',
+    '#ce-sel-bar .ce-ttl{font-size:14px;font-weight:800;white-space:nowrap;}',
+    '#ce-sel-bar .ce-hint{flex:1;font-size:11px;opacity:.88;min-width:140px;}',
+    '#ce-sel-count{background:rgba(0,0,0,.22);border-radius:20px;padding:3px 12px;',
+      'font-weight:700;white-space:nowrap;font-size:12px;}',
+    '.ce-b{border:none;border-radius:5px;padding:7px 14px;',
+      'cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;}',
+    '#ce-b-save{background:#00cc66;color:#000;}',
+    '#ce-b-save:hover:not(:disabled){background:#00aa55;}',
+    '#ce-b-save:disabled{opacity:.4;cursor:not-allowed;}',
+    '#ce-b-done{background:#0066cc;color:#fff;}',
+    '#ce-b-done:hover:not(:disabled){background:#0052a3;}',
+    '#ce-b-done:disabled{opacity:.4;cursor:not-allowed;}',
+    '#ce-b-cancel{background:transparent;color:#fff;',
+      'border:1.5px solid rgba(255,255,255,.6) !important;}',
+    '#ce-b-cancel:hover{background:rgba(255,255,255,.12);}',
+    /* Tooltip de intro */
+    '#ce-intro{',
+      'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483646;',
+      'background:#1a1a2e;color:#fff;border-radius:12px;padding:18px 22px 14px;',
+      'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
+      'font-size:13px;max-width:min(440px,92vw);line-height:1.6;',
+      'box-shadow:0 8px 32px rgba(0,0,0,.5);}',
+    '#ce-intro h4{margin:0 0 10px;font-size:15px;font-weight:800;}',
+    '#ce-intro ul{margin:0 0 14px;padding-left:18px;}',
+    '#ce-intro li{margin-bottom:4px;}',
+    '#ce-intro-ok{',
+      'display:block;width:100%;border:none;border-radius:6px;padding:10px;',
+      'background:#ff9900;color:#000;font-size:13px;font-weight:700;cursor:pointer;}',
+    '#ce-intro-ok:hover{background:#e68a00;}',
+    /* Aviso sin botones */
     '#ce-no-btns{',
-      'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:2147483646;',
-      'background:#1a1a2e;color:#fff;border-radius:10px;padding:14px 22px;',
+      'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483645;',
+      'background:#2d2d2d;color:#eee;border-radius:10px;padding:12px 20px;',
       'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
       'font-size:13px;max-width:92vw;text-align:center;',
-      'box-shadow:0 6px 24px rgba(0,0,0,.45);line-height:1.5;}',
+      'box-shadow:0 6px 24px rgba(0,0,0,.4);line-height:1.5;}',
+    /* Toast */
     '#ce-toast{',
       'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:2147483647;',
-      'background:#1a7f4b;color:#fff;border-radius:10px;padding:14px 28px;',
+      'background:#1a7f4b;color:#fff;border-radius:10px;padding:13px 26px;',
       'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
-      'font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.35);',
+      'font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.3);',
       'opacity:0;transition:opacity .3s ease;pointer-events:none;}',
+    /* Botones resaltados (naranja pulsante) */
     '.ce-sel-hl{',
       'outline:none !important;',
-      'box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 6px rgba(255,153,0,.2) !important;',
+      'box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 7px rgba(255,153,0,.18) !important;',
       'cursor:crosshair !important;',
-      'animation:ce-pulse 1.4s ease-in-out infinite !important;',
+      'animation:ce-pulse 1.5s ease-in-out infinite !important;',
       'position:relative !important;}',
+    /* Botones seleccionados (verde fijo) */
     '.ce-sel-hl.ce-sel-on{',
       'box-shadow:0 0 0 3px #00cc66 !important;',
       'animation:none !important;',
       'background:rgba(0,204,102,.10) !important;}',
+    /* Badge ✓ */
     '.ce-chk{',
       'position:absolute !important;top:-9px !important;right:-9px !important;',
       'background:#00cc66;color:#fff;border-radius:50%;',
       'width:22px !important;height:22px !important;',
       'display:flex !important;align-items:center !important;justify-content:center !important;',
       'font-size:13px !important;font-weight:900 !important;',
-      'pointer-events:none !important;z-index:2147483645 !important;',
+      'pointer-events:none !important;z-index:2147483644 !important;',
       'box-shadow:0 1px 4px rgba(0,0,0,.3) !important;}',
   ].join('');
   document.head.appendChild(style);
@@ -102,34 +142,65 @@
     var bar = document.createElement('div');
     bar.id  = 'ce-sel-bar';
     bar.innerHTML =
-      '<span class="ce-title">&#127919;&nbsp;MODO SELECCI&Oacute;N &mdash; Calendify</span>' +
-      '<span class="ce-hint">Haz clic en los botones de checkout que deben requerir fecha de entrega</span>' +
-      '<span id="ce-sel-count">0 seleccionados</span>' +
-      '<button id="ce-btn-save" class="ce-act" disabled>Guardar selecci&oacute;n</button>' +
-      '<button id="ce-btn-cancel" class="ce-act">Cancelar</button>';
+      '<span class="ce-ttl">&#127919; MODO SELECCI&Oacute;N &mdash; Calendify</span>' +
+      '<span class="ce-hint">Navega por tu tienda y haz clic en los botones de checkout que quieres activar</span>' +
+      '<span id="ce-sel-count">' + countLabel() + '</span>' +
+      '<button id="ce-b-save"  class="ce-b" ' + (selected.length ? '' : 'disabled') + '>&#128190; Guardar y seguir</button>' +
+      '<button id="ce-b-done"  class="ce-b" ' + (selected.length ? '' : 'disabled') + '>&#10003; Listo, termin&eacute;</button>' +
+      '<button id="ce-b-cancel" class="ce-b">&#10005; Cancelar</button>';
 
-    if (document.body.firstChild) {
-      document.body.insertBefore(bar, document.body.firstChild);
-    } else {
-      document.body.appendChild(bar);
-    }
+    if (document.body.firstChild) document.body.insertBefore(bar, document.body.firstChild);
+    else document.body.appendChild(bar);
 
     document.body.style.paddingTop =
       (parseInt(document.body.style.paddingTop || '0', 10) + 56) + 'px';
 
-    document.getElementById('ce-btn-save').addEventListener('click', doSave);
-    document.getElementById('ce-btn-cancel').addEventListener('click', doCancel);
+    document.getElementById('ce-b-save').addEventListener('click', doSaveAndStay);
+    document.getElementById('ce-b-done').addEventListener('click', doSaveAndClose);
+    document.getElementById('ce-b-cancel').addEventListener('click', doCancel);
+  }
+
+  function countLabel() {
+    var n = selected.length;
+    return n + (n === 1 ? ' seleccionado' : ' seleccionados');
   }
 
   function updateCount() {
-    var n  = selected.length;
     var el = document.getElementById('ce-sel-count');
-    if (el) el.textContent = n + (n === 1 ? ' seleccionado' : ' seleccionados');
-    var btn = document.getElementById('ce-btn-save');
-    if (btn) btn.disabled = (n === 0);
+    if (el) el.textContent = countLabel();
+    var disabled = selected.length === 0;
+    var s = document.getElementById('ce-b-save');
+    var d = document.getElementById('ce-b-done');
+    if (s) s.disabled = disabled;
+    if (d) d.disabled = disabled;
   }
 
-  // ── Construir selector CSS único para un elemento ──────────────
+  // ── Tooltip de bienvenida (solo primera vez en la sesión) ──────
+  function maybeShowIntro() {
+    if (sessionStorage.getItem(SS_INTRO)) return;
+    sessionStorage.setItem(SS_INTRO, '1');
+
+    var box = document.createElement('div');
+    box.id  = 'ce-intro';
+    box.innerHTML =
+      '<h4>&#127919; C&oacute;mo usar el modo selecci&oacute;n</h4>' +
+      '<ul>' +
+        '<li>Los botones de checkout detectados tienen <strong>borde naranja pulsante</strong></li>' +
+        '<li>Haz clic en un bot&oacute;n para seleccionarlo &mdash; se vuelve <strong>verde &#10003;</strong></li>' +
+        '<li>Puedes <strong>navegar a otras p&aacute;ginas</strong> (productos, carrito) &mdash; tus selecciones se conservan</li>' +
+        '<li>Cuando termines, usa <em>&#128190; Guardar y seguir</em> o <em>&#10003; Listo, termin&eacute;</em></li>' +
+      '</ul>' +
+      '<button id="ce-intro-ok">Entendido, empezar &#8594;</button>';
+    document.body.appendChild(box);
+
+    document.getElementById('ce-intro-ok').addEventListener('click', function() {
+      box.style.opacity = '0';
+      box.style.transition = 'opacity .25s';
+      setTimeout(function() { if (box.parentNode) box.remove(); }, 260);
+    });
+  }
+
+  // ── Selector CSS único para un elemento ───────────────────────
   function buildSelector(el) {
     if (el.id && !/^\d/.test(el.id)) return '#' + CSS.escape(el.id);
     var tag = el.tagName.toLowerCase();
@@ -144,12 +215,23 @@
     return tag;
   }
 
-  // ── Resaltar un botón detectado ────────────────────────────────
+  // ── Resaltar un botón + restaurar selección previa ─────────────
   function highlightBtn(el) {
     if (el._ceHl) return;
     el._ceHl = true;
     el.classList.add('ce-sel-hl');
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+
+    // Restaurar si ya estaba seleccionado en una página anterior
+    var elSel = buildSelector(el);
+    var wasSelected = selected.indexOf(elSel) !== -1;
+    if (!wasSelected) {
+      // También comparar contra selectores almacenados usando .matches()
+      for (var k = 0; k < selected.length; k++) {
+        try { if (el.matches(selected[k])) { wasSelected = true; break; } } catch (_) {}
+      }
+    }
+    if (wasSelected) markSelected(el, false);
 
     el.addEventListener('click', function(e) {
       e.preventDefault();
@@ -158,33 +240,52 @@
 
       var sel = buildSelector(el);
       var idx = selected.indexOf(sel);
-
       if (idx === -1) {
         selected.push(sel);
-        el.classList.add('ce-sel-on');
-        if (!el.querySelector('.ce-chk')) {
-          var badge = document.createElement('span');
-          badge.className   = 'ce-chk';
-          badge.textContent = '✓';
-          el.appendChild(badge);
-        }
+        markSelected(el, true);
       } else {
         selected.splice(idx, 1);
-        el.classList.remove('ce-sel-on');
-        var b = el.querySelector('.ce-chk');
-        if (b) b.remove();
+        unmarkSelected(el);
       }
+      persistSelected();
       updateCount();
     }, true);
   }
 
-  // ── Escanear y resaltar botones ────────────────────────────────
+  function markSelected(el, animate) {
+    el.classList.add('ce-sel-on');
+    if (!el.querySelector('.ce-chk')) {
+      var badge = document.createElement('span');
+      badge.className = 'ce-chk';
+      badge.textContent = '✓';
+      if (animate) {
+        badge.style.transform = 'scale(0)';
+        badge.style.transition = 'transform .15s ease';
+        el.appendChild(badge);
+        requestAnimationFrame(function() { badge.style.transform = 'scale(1)'; });
+      } else {
+        el.appendChild(badge);
+      }
+    }
+  }
+
+  function unmarkSelected(el) {
+    el.classList.remove('ce-sel-on');
+    var b = el.querySelector('.ce-chk');
+    if (b) {
+      b.style.transition = 'transform .12s ease';
+      b.style.transform  = 'scale(0)';
+      setTimeout(function() { if (b.parentNode) b.remove(); }, 130);
+    }
+  }
+
+  // ── Escanear página y resaltar botones ─────────────────────────
   function scan() {
     var found = 0;
     CE_SELECTORS.forEach(function(sel) {
       try {
         document.querySelectorAll(sel).forEach(function(el) {
-          if (el.closest('#ce-sel-bar')) return;
+          if (el.closest('#ce-sel-bar') || el.closest('#ce-intro')) return;
           if (el.offsetParent === null && el.tagName !== 'INPUT') return;
           highlightBtn(el);
           found++;
@@ -194,24 +295,32 @@
     return found;
   }
 
-  // ── Mensaje si no hay botones en la página actual ──────────────
   function showNoBtnsMsg(found) {
     var existing = document.getElementById('ce-no-btns');
     if (found > 0) { if (existing) existing.remove(); return; }
     if (existing) return;
-    var div       = document.createElement('div');
-    div.id        = 'ce-no-btns';
+    var div = document.createElement('div');
+    div.id  = 'ce-no-btns';
     div.innerHTML =
-      '&#9888;&#65039; <strong>No se detectaron botones de checkout en esta p&aacute;gina.</strong><br>' +
-      'Navega al carrito (<code>/cart</code>) o a una p&aacute;gina de producto para ver los botones resaltados.';
+      '&#9888; <strong>No hay botones de checkout en esta p&aacute;gina.</strong><br>' +
+      'Navega al carrito (<code>/cart</code>) o a una p&aacute;gina de producto.';
     document.body.appendChild(div);
   }
 
-  // ── Guardar ────────────────────────────────────────────────────
-  function doSave() {
-    var btn         = document.getElementById('ce-btn-save');
-    btn.disabled    = true;
-    btn.textContent = 'Guardando...';
+  // ── Limpiar modo (sessionStorage) ─────────────────────────────
+  function clearMode() {
+    sessionStorage.removeItem(SS_MODE);
+    sessionStorage.removeItem(SS_SELS);
+    sessionStorage.removeItem(SS_INTRO);
+    window.__ceSelectionMode = false;
+  }
+
+  // ── Acciones ───────────────────────────────────────────────────
+  function saveToAPI(onSuccess, onError) {
+    var btn1 = document.getElementById('ce-b-save');
+    var btn2 = document.getElementById('ce-b-done');
+    if (btn1) { btn1.disabled = true; btn1.textContent = 'Guardando...'; }
+    if (btn2) { btn2.disabled = true; }
 
     fetch('/apps/proxy/api/button-selectors', {
       method:  'POST',
@@ -221,29 +330,55 @@
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (data.success) {
-        var n = selected.length;
-        showToast('✅ ¡Guardado! ' + n + (n === 1 ? ' botón configurado' : ' botones configurados'));
-        setTimeout(function() {
-          window.close();
-          setTimeout(function() {
-            var cu = new URL(window.location.href);
-            cu.searchParams.delete('ce_select_mode');
-            window.location.href = cu.toString();
-          }, 400);
-        }, 1800);
+        onSuccess();
       } else {
-        btn.textContent = '❌ Error — reintentar';
-        btn.disabled    = false;
+        if (btn1) { btn1.disabled = false; btn1.textContent = '💾 Guardar y seguir'; }
+        if (btn2) { btn2.disabled = false; }
+        if (onError) onError('Error del servidor');
       }
     })
-    .catch(function() {
-      btn.textContent = '❌ Error — reintentar';
-      var b = document.getElementById('ce-btn-save');
-      if (b) b.disabled = false;
+    .catch(function(err) {
+      if (btn1) { btn1.disabled = false; btn1.textContent = '💾 Guardar y seguir'; }
+      if (btn2) { btn2.disabled = false; }
+      if (onError) onError(err);
     });
   }
 
+  // 💾 Guardar y seguir: guarda, sale del modo, se queda en la página actual
+  function doSaveAndStay() {
+    saveToAPI(function() {
+      var n = selected.length;
+      showToast('✅ ' + n + (n === 1 ? ' botón guardado' : ' botones guardados'));
+      setTimeout(function() {
+        clearMode();
+        var cu = new URL(window.location.href);
+        cu.searchParams.delete('ce_select_mode');
+        window.location.href = cu.toString();
+      }, 1800);
+    });
+  }
+
+  // ✓ Listo, terminé: guarda y cierra la pestaña
+  function doSaveAndClose() {
+    saveToAPI(function() {
+      var n = selected.length;
+      showToast('✅ ' + n + (n === 1 ? ' botón guardado' : ' botones guardados') + ' — cerrando...');
+      clearMode();
+      setTimeout(function() {
+        window.close();
+        // Fallback: si window.close() no funciona, limpiar URL
+        setTimeout(function() {
+          var cu = new URL(window.location.href);
+          cu.searchParams.delete('ce_select_mode');
+          window.location.href = cu.toString();
+        }, 500);
+      }, 1600);
+    });
+  }
+
+  // ✗ Cancelar: sale sin guardar
   function doCancel() {
+    clearMode();
     var cu = new URL(window.location.href);
     cu.searchParams.delete('ce_select_mode');
     window.location.href = cu.toString();
@@ -261,6 +396,7 @@
   // ── Init ───────────────────────────────────────────────────────
   function init() {
     buildBar();
+    maybeShowIntro();
     var found = scan();
     showNoBtnsMsg(found);
     new MutationObserver(function() {
