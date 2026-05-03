@@ -1,12 +1,12 @@
 import { PrismaClient } from "@prisma/client";
 
-if (process.env.NODE_ENV !== "production") {
-  if (!global.prismaGlobal) {
-    global.prismaGlobal = new PrismaClient();
-  }
-}
+// En desarrollo: reusar la instancia entre hot-reloads (evita "Too many connections" en dev)
+// En producción (Vercel serverless): cachear en globalThis para reusar en instancias warm
+// Sin este patrón, cada invocación serverless crea un nuevo PrismaClient con su propio pool
+const globalForPrisma = globalThis;
 
-const prisma = global.prismaGlobal ?? new PrismaClient();
+export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+
+globalForPrisma.prisma = prisma;
 
 export default prisma;
-export { prisma };
