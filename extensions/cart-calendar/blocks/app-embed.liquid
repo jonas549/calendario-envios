@@ -12,21 +12,20 @@
   var SS_SELS  = 'ce_sel_sels';     // JSON array de selectores acumulados
   var SS_INTRO = 'ce_sel_intro';    // '1' después de mostrar el tooltip inicial
 
-  // Activar por URL param o por sessionStorage (navegación entre páginas)
   var urlMode = new URL(window.location.href).searchParams.get('ce_select_mode') === '1';
   var ssMode  = sessionStorage.getItem(SS_MODE) === '1';
 
   if (!urlMode && !ssMode) return;
 
-  // Persistir el modo en sessionStorage
-  sessionStorage.setItem(SS_MODE, '1');
+  // Primera activación = llega desde el link del admin (URL param, sin sesión previa)
+  var firstActivation = urlMode && !ssMode;
 
-  // Bloquear interceptación del App Block durante este modo
+  sessionStorage.setItem(SS_MODE, '1');
   window.__ceSelectionMode = true;
 
   var SHOP = {{ shop.permanent_domain | json }};
 
-  // Cargar selecciones previas (de páginas anteriores en esta sesión)
+  // Cargar selecciones de páginas anteriores en esta sesión
   var selected;
   try { selected = JSON.parse(sessionStorage.getItem(SS_SELS) || '[]'); }
   catch (_) { selected = []; }
@@ -62,7 +61,6 @@
       '0%,100%{box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 7px rgba(255,153,0,.2)}',
       '50%{box-shadow:0 0 0 4px rgba(255,100,0,1),0 0 0 11px rgba(255,100,0,.07)}',
     '}',
-    /* Barra superior */
     '#ce-sel-bar{',
       'position:fixed;top:0;left:0;right:0;z-index:2147483647;',
       'background:linear-gradient(135deg,#e65c00 0%,#ff9900 100%);',
@@ -85,7 +83,6 @@
     '#ce-b-cancel{background:transparent;color:#fff;',
       'border:1.5px solid rgba(255,255,255,.6) !important;}',
     '#ce-b-cancel:hover{background:rgba(255,255,255,.12);}',
-    /* Tooltip de intro */
     '#ce-intro{',
       'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483646;',
       'background:#1a1a2e;color:#fff;border-radius:12px;padding:18px 22px 14px;',
@@ -95,37 +92,31 @@
     '#ce-intro h4{margin:0 0 10px;font-size:15px;font-weight:800;}',
     '#ce-intro ul{margin:0 0 14px;padding-left:18px;}',
     '#ce-intro li{margin-bottom:4px;}',
-    '#ce-intro-ok{',
-      'display:block;width:100%;border:none;border-radius:6px;padding:10px;',
+    '#ce-intro-ok{display:block;width:100%;border:none;border-radius:6px;padding:10px;',
       'background:#ff9900;color:#000;font-size:13px;font-weight:700;cursor:pointer;}',
     '#ce-intro-ok:hover{background:#e68a00;}',
-    /* Aviso sin botones */
     '#ce-no-btns{',
       'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:2147483645;',
       'background:#2d2d2d;color:#eee;border-radius:10px;padding:12px 20px;',
       'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
       'font-size:13px;max-width:92vw;text-align:center;',
       'box-shadow:0 6px 24px rgba(0,0,0,.4);line-height:1.5;}',
-    /* Toast */
     '#ce-toast{',
       'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:2147483647;',
       'background:#1a7f4b;color:#fff;border-radius:10px;padding:13px 26px;',
       'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;',
       'font-size:15px;font-weight:700;box-shadow:0 6px 24px rgba(0,0,0,.3);',
       'opacity:0;transition:opacity .3s ease;pointer-events:none;}',
-    /* Botones resaltados (naranja pulsante) */
     '.ce-sel-hl{',
       'outline:none !important;',
       'box-shadow:0 0 0 3px rgba(255,153,0,.9),0 0 0 7px rgba(255,153,0,.18) !important;',
       'cursor:crosshair !important;',
       'animation:ce-pulse 1.5s ease-in-out infinite !important;',
       'position:relative !important;}',
-    /* Botones seleccionados (verde fijo) */
     '.ce-sel-hl.ce-sel-on{',
       'box-shadow:0 0 0 3px #00cc66 !important;',
       'animation:none !important;',
       'background:rgba(0,204,102,.10) !important;}',
-    /* Badge ✓ */
     '.ce-chk{',
       'position:absolute !important;top:-9px !important;right:-9px !important;',
       'background:#00cc66;color:#fff;border-radius:50%;',
@@ -168,11 +159,11 @@
   function updateCount() {
     var el = document.getElementById('ce-sel-count');
     if (el) el.textContent = countLabel();
-    var disabled = selected.length === 0;
+    var empty = selected.length === 0;
     var s = document.getElementById('ce-b-save');
     var d = document.getElementById('ce-b-done');
-    if (s) s.disabled = disabled;
-    if (d) d.disabled = disabled;
+    if (s) s.disabled = empty;
+    if (d) d.disabled = empty;
   }
 
   // ── Tooltip de bienvenida (solo primera vez en la sesión) ──────
@@ -187,14 +178,15 @@
       '<ul>' +
         '<li>Los botones de checkout detectados tienen <strong>borde naranja pulsante</strong></li>' +
         '<li>Haz clic en un bot&oacute;n para seleccionarlo &mdash; se vuelve <strong>verde &#10003;</strong></li>' +
-        '<li>Puedes <strong>navegar a otras p&aacute;ginas</strong> (productos, carrito) &mdash; tus selecciones se conservan</li>' +
-        '<li>Cuando termines, usa <em>&#128190; Guardar y seguir</em> o <em>&#10003; Listo, termin&eacute;</em></li>' +
+        '<li>Puedes <strong>navegar a otras p&aacute;ginas</strong> &mdash; tus selecciones se conservan</li>' +
+        '<li><em>&#128190; Guardar y seguir</em> = guarda pero contin&uacute;a seleccionando</li>' +
+        '<li><em>&#10003; Listo, termin&eacute;</em> = guarda y cierra esta pesta&ntilde;a</li>' +
       '</ul>' +
       '<button id="ce-intro-ok">Entendido, empezar &#8594;</button>';
     document.body.appendChild(box);
 
     document.getElementById('ce-intro-ok').addEventListener('click', function() {
-      box.style.opacity = '0';
+      box.style.opacity    = '0';
       box.style.transition = 'opacity .25s';
       setTimeout(function() { if (box.parentNode) box.remove(); }, 260);
     });
@@ -215,23 +207,25 @@
     return tag;
   }
 
-  // ── Resaltar un botón + restaurar selección previa ─────────────
+  // Comprueba si un elemento coincide con algún selector de `selected`
+  function isInSelected(el) {
+    var elSel = buildSelector(el);
+    if (selected.indexOf(elSel) !== -1) return true;
+    for (var k = 0; k < selected.length; k++) {
+      try { if (el.matches(selected[k])) return true; } catch (_) {}
+    }
+    return false;
+  }
+
+  // ── Resaltar un botón ──────────────────────────────────────────
   function highlightBtn(el) {
     if (el._ceHl) return;
     el._ceHl = true;
     el.classList.add('ce-sel-hl');
     if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
 
-    // Restaurar si ya estaba seleccionado en una página anterior
-    var elSel = buildSelector(el);
-    var wasSelected = selected.indexOf(elSel) !== -1;
-    if (!wasSelected) {
-      // También comparar contra selectores almacenados usando .matches()
-      for (var k = 0; k < selected.length; k++) {
-        try { if (el.matches(selected[k])) { wasSelected = true; break; } } catch (_) {}
-      }
-    }
-    if (wasSelected) markSelected(el, false);
+    // Marcar si ya está en la lista actual (sessionStorage o backend cargado)
+    if (isInSelected(el)) markSelected(el, false);
 
     el.addEventListener('click', function(e) {
       e.preventDefault();
@@ -252,14 +246,21 @@
     }, true);
   }
 
+  // Actualiza botones ya resaltados que aún no están en verde
+  function refreshHighlights() {
+    document.querySelectorAll('.ce-sel-hl:not(.ce-sel-on)').forEach(function(el) {
+      if (isInSelected(el)) markSelected(el, false);
+    });
+  }
+
   function markSelected(el, animate) {
     el.classList.add('ce-sel-on');
     if (!el.querySelector('.ce-chk')) {
       var badge = document.createElement('span');
-      badge.className = 'ce-chk';
+      badge.className   = 'ce-chk';
       badge.textContent = '✓';
       if (animate) {
-        badge.style.transform = 'scale(0)';
+        badge.style.transform  = 'scale(0)';
         badge.style.transition = 'transform .15s ease';
         el.appendChild(badge);
         requestAnimationFrame(function() { badge.style.transform = 'scale(1)'; });
@@ -279,7 +280,7 @@
     }
   }
 
-  // ── Escanear página y resaltar botones ─────────────────────────
+  // ── Escanear y resaltar botones ────────────────────────────────
   function scan() {
     var found = 0;
     CE_SELECTORS.forEach(function(sel) {
@@ -307,20 +308,12 @@
     document.body.appendChild(div);
   }
 
-  // ── Limpiar modo (sessionStorage) ─────────────────────────────
-  function clearMode() {
-    sessionStorage.removeItem(SS_MODE);
-    sessionStorage.removeItem(SS_SELS);
-    sessionStorage.removeItem(SS_INTRO);
-    window.__ceSelectionMode = false;
-  }
-
-  // ── Acciones ───────────────────────────────────────────────────
-  function saveToAPI(onSuccess, onError) {
+  // ── POST a la API ──────────────────────────────────────────────
+  function saveToAPI(onSuccess) {
     var btn1 = document.getElementById('ce-b-save');
     var btn2 = document.getElementById('ce-b-done');
     if (btn1) { btn1.disabled = true; btn1.textContent = 'Guardando...'; }
-    if (btn2) { btn2.disabled = true; }
+    if (btn2)   btn2.disabled = true;
 
     fetch('/apps/proxy/api/button-selectors', {
       method:  'POST',
@@ -332,29 +325,40 @@
       if (data.success) {
         onSuccess();
       } else {
-        if (btn1) { btn1.disabled = false; btn1.textContent = '💾 Guardar y seguir'; }
-        if (btn2) { btn2.disabled = false; }
-        if (onError) onError('Error del servidor');
+        restoreSaveBtns();
+        showToast('❌ Error al guardar — intenta de nuevo');
       }
     })
-    .catch(function(err) {
-      if (btn1) { btn1.disabled = false; btn1.textContent = '💾 Guardar y seguir'; }
-      if (btn2) { btn2.disabled = false; }
-      if (onError) onError(err);
+    .catch(function() {
+      restoreSaveBtns();
+      showToast('❌ Error de red — intenta de nuevo');
     });
   }
 
-  // 💾 Guardar y seguir: guarda, sale del modo, se queda en la página actual
+  function restoreSaveBtns() {
+    var btn1 = document.getElementById('ce-b-save');
+    var btn2 = document.getElementById('ce-b-done');
+    if (btn1) { btn1.disabled = selected.length === 0; btn1.innerHTML = '&#128190; Guardar y seguir'; }
+    if (btn2) { btn2.disabled = selected.length === 0; }
+  }
+
+  // ── Limpiar modo (sessionStorage) ─────────────────────────────
+  function clearMode() {
+    sessionStorage.removeItem(SS_MODE);
+    sessionStorage.removeItem(SS_SELS);
+    sessionStorage.removeItem(SS_INTRO);
+    window.__ceSelectionMode = false;
+  }
+
+  // ── Acciones ───────────────────────────────────────────────────
+
+  // 💾 Guardar y seguir: guarda a API pero MANTIENE el modo activo
   function doSaveAndStay() {
     saveToAPI(function() {
       var n = selected.length;
-      showToast('✅ ' + n + (n === 1 ? ' botón guardado' : ' botones guardados'));
-      setTimeout(function() {
-        clearMode();
-        var cu = new URL(window.location.href);
-        cu.searchParams.delete('ce_select_mode');
-        window.location.href = cu.toString();
-      }, 1800);
+      showToast('✅ ' + n + (n === 1 ? ' botón guardado' : ' botones guardados') + ' — puedes seguir seleccionando');
+      restoreSaveBtns();
+      // No clearMode(), no navigate — el merchant continúa donde está
     });
   }
 
@@ -366,7 +370,7 @@
       clearMode();
       setTimeout(function() {
         window.close();
-        // Fallback: si window.close() no funciona, limpiar URL
+        // Fallback si window.close() no cierra
         setTimeout(function() {
           var cu = new URL(window.location.href);
           cu.searchParams.delete('ce_select_mode');
@@ -376,7 +380,7 @@
     });
   }
 
-  // ✗ Cancelar: sale sin guardar
+  // ✗ Cancelar: sale sin guardar, se queda en la página actual
   function doCancel() {
     clearMode();
     var cu = new URL(window.location.href);
@@ -390,7 +394,27 @@
     if (!t) { t = document.createElement('div'); t.id = 'ce-toast'; document.body.appendChild(t); }
     t.textContent   = msg;
     t.style.opacity = '1';
-    setTimeout(function() { t.style.opacity = '0'; }, 3500);
+    setTimeout(function() { t.style.opacity = '0'; }, 4000);
+  }
+
+  // ── Cargar selectores del backend al iniciar por primera vez ──
+  // Solo en primera activación (URL param, sin sesión previa en esta pestaña)
+  function loadFromBackend() {
+    fetch('/apps/proxy/api/button-selectors?shop=' + encodeURIComponent(SHOP))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.success || !Array.isArray(data.selectors) || !data.selectors.length) return;
+        var changed = false;
+        data.selectors.forEach(function(sel) {
+          if (selected.indexOf(sel) === -1) { selected.push(sel); changed = true; }
+        });
+        if (changed) {
+          persistSelected();
+          refreshHighlights();
+          updateCount();
+        }
+      })
+      .catch(function() {}); // silencioso — no bloquear la UI si falla
   }
 
   // ── Init ───────────────────────────────────────────────────────
@@ -399,6 +423,10 @@
     maybeShowIntro();
     var found = scan();
     showNoBtnsMsg(found);
+
+    // Cargar selectores del backend si es la primera activación de la sesión
+    if (firstActivation) loadFromBackend();
+
     new MutationObserver(function() {
       var f = scan();
       showNoBtnsMsg(f);
