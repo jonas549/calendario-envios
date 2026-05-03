@@ -150,8 +150,7 @@ export default function Configuracion() {
     },
   ];
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSave = () => {
     const formData = new FormData();
     formData.append("mode", mode);
     formData.append("daysAhead", daysAhead);
@@ -185,47 +184,45 @@ export default function Configuracion() {
           <BlockStack gap="500">
             {/* ── Sección 1: Modo de corte ── */}
             <Card>
-              <form onSubmit={handleSubmit} id="config-form">
-                <FormLayout>
-                  <BlockStack gap="400">
-                    <Text as="h2" variant="headingMd">
-                      Modo de corte de envío
-                    </Text>
+              <FormLayout>
+                <BlockStack gap="400">
+                  <Text as="h2" variant="headingMd">
+                    Modo de corte de envío
+                  </Text>
 
-                    <Text as="p" tone="subdued">
-                      ⚠️ La hora de corte se configura por ciudad en la sección
-                      "Ciudades".
-                    </Text>
+                  <Text as="p" tone="subdued">
+                    ⚠️ La hora de corte se configura por ciudad en la sección
+                    "Ciudades".
+                  </Text>
 
-                    <Select
-                      label="Selecciona el modo"
-                      options={modeOptions}
-                      value={mode}
-                      onChange={setMode}
-                    />
+                  <Select
+                    label="Selecciona el modo"
+                    options={modeOptions}
+                    value={mode}
+                    onChange={setMode}
+                  />
 
-                    {mode === "dia_futuro" && (
-                      <TextField
-                        label="Días de anticipación"
-                        type="number"
-                        value={daysAhead}
-                        onChange={setDaysAhead}
-                        min="1"
-                        helpText="Número de días después del pedido para la entrega"
-                      />
-                    )}
-
+                  {mode === "dia_futuro" && (
                     <TextField
-                      label="Mensaje adicional (opcional)"
-                      value={additionalMessage}
-                      onChange={setAdditionalMessage}
-                      multiline={3}
-                      helpText="Aparece debajo del calendario en el carrito. Ej: 'Entregas de 8 AM a 8 PM'"
-                      placeholder="Escribe un mensaje adicional para tus clientes..."
+                      label="Días de anticipación"
+                      type="number"
+                      value={daysAhead}
+                      onChange={setDaysAhead}
+                      min="1"
+                      helpText="Número de días después del pedido para la entrega"
                     />
-                  </BlockStack>
-                </FormLayout>
-              </form>
+                  )}
+
+                  <TextField
+                    label="Mensaje adicional (opcional)"
+                    value={additionalMessage}
+                    onChange={setAdditionalMessage}
+                    multiline={3}
+                    helpText="Aparece debajo del calendario en el carrito. Ej: 'Entregas de 8 AM a 8 PM'"
+                    placeholder="Escribe un mensaje adicional para tus clientes..."
+                  />
+                </BlockStack>
+              </FormLayout>
             </Card>
 
             {/* ── Sección 2: Recogida en tienda ── */}
@@ -319,7 +316,7 @@ export default function Configuracion() {
               </BlockStack>
             </Card>
 
-            <Button submit variant="primary" form="config-form">
+            <Button variant="primary" onClick={handleSave}>
               Guardar configuración
             </Button>
           </BlockStack>
