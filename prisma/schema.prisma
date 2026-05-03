@@ -54,12 +54,16 @@ model Holiday {
 }
 
 model Config {
-  id                 String   @id @default(cuid())
-  shop               String   @unique
-  mode               String   @default("mismo_dia")
-  daysAhead          Int      @default(1)
-  additionalMessage  String   @default("")
-  updatedAt          DateTime @updatedAt
+  id                    String   @id @default(cuid())
+  shop                  String   @unique
+  mode                  String   @default("mismo_dia")
+  daysAhead             Int      @default(1)
+  additionalMessage     String   @default("")
+  pickupEnabled         Boolean  @default(false)
+  pickupLabel           String   @default("Recoger en tienda")
+  checkoutButtonClasses String   @default("")
+  requireDelivery       Boolean  @default(true)
+  updatedAt             DateTime @updatedAt
 
   @@index([shop])
 }

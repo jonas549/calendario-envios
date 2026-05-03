@@ -11,3 +11,7 @@ handle = "cart-calendar"
 [[extensions.targeting]]
 target = "body_end"
 module = "./snippets/app-embed.liquid"
+
+[[extensions.targeting]]
+target = "section"
+module = "./blocks/calendar-widget.liquid"

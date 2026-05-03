@@ -66,7 +66,7 @@ export async function requireBilling(request) {
   
   await billing.require({
     plans: ["Plan Pro"],
-    isTest: true,
+    isTest: process.env.BILLING_TEST_MODE === "true",
   });
   
   logger.info("billing-check", "Billing verificado OK", null, session.shop);

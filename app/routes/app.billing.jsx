@@ -12,7 +12,7 @@ export const loader = async ({ request }) => {
     // Verificar si ya tiene subscripción
     const billingCheck = await billing.check({
       plans: ["Plan Pro"],
-      isTest: true,
+      isTest: process.env.BILLING_TEST_MODE === "true",
     });
 
     if (billingCheck.hasActivePayment) {
@@ -32,7 +32,7 @@ export const loader = async ({ request }) => {
 
     const billingResponse = await billing.request({
       plan: "Plan Pro",
-      isTest: true,
+      isTest: process.env.BILLING_TEST_MODE === "true",
       returnUrl: `${process.env.SHOPIFY_APP_URL}/app/installer`
     });
 

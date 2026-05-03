@@ -128,9 +128,8 @@
       });
 
       deliverySelected = true;
-      
+
       // Pre-rellenar ciudad en checkout
-      const city = localStorage.getItem('ce_delivery_city');
       const checkoutBtns = document.querySelectorAll('button[name="checkout"], [href*="/checkout"]');
       checkoutBtns.forEach(btn => {
         if (btn.tagName === 'A') {

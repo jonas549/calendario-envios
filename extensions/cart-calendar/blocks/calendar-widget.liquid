@@ -1,0 +1,460 @@
+{% comment %}
+  Calendify Delivery — App Block posicionable
+  Funciona en carrito, producto, o cualquier sección del tema.
+  El merchant lo arrastra desde Personalizar tema → Apps.
+{% endcomment %}
+
+{% assign wid   = block.id | remove: '-' %}
+{% assign shop_domain = shop.permanent_domain %}
+
+<div id="ce-widget-{{ wid }}" class="ce-wrapper">
+
+  {% if block.settings.show_title %}
+  <h3 style="margin: 0 0 15px 0; font-size: 18px;">
+    {{ block.settings.widget_title | default: '📅 Selecciona tu fecha de entrega' }}
+  </h3>
+  {% endif %}
+
+  <!-- Opción de recogida (visible solo si pickupEnabled en admin) -->
+  <div id="ce-pickup-section-{{ wid }}" style="display: none; margin-bottom: 15px;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; font-weight: 500;">
+      <input type="checkbox" id="ce-pickup-{{ wid }}" style="width: 16px; height: 16px; cursor: pointer;">
+      <span id="ce-pickup-label-{{ wid }}">Recoger en tienda</span>
+    </label>
+  </div>
+
+  <!-- Sección de entrega a domicilio -->
+  <div id="ce-delivery-{{ wid }}" class="ce-fields">
+    <div class="ce-field">
+      <label for="ce-city-{{ wid }}">Ciudad</label>
+      <select id="ce-city-{{ wid }}">
+        <option value="">-- Selecciona tu ciudad --</option>
+      </select>
+    </div>
+
+    <div id="ce-date-wrapper-{{ wid }}" class="ce-field" style="display: none;">
+      <label for="ce-date-{{ wid }}">Fecha de entrega</label>
+      <input type="text" id="ce-date-{{ wid }}" readonly
+        placeholder="Selecciona una ciudad primero">
+    </div>
+  </div>
+
+  <!-- Mensaje de estado -->
+  <div id="ce-msg-{{ wid }}" class="ce-message" style="display: none;"></div>
+
+</div>
+
+<link rel="stylesheet" href="{{ 'calendar.css' | asset_url }}">
+
+<script>
+(function() {
+  'use strict';
+
+  var SHOP = {{ shop.permanent_domain | json }};
+  var WID  = {{ wid | json }};
+  var LSK  = 'ce_' + SHOP.replace(/\./g, '_');
+
+  var appConfig       = {};
+  var fpInstance      = null;
+  var deliverySelected = false;
+  var pickupSelected   = false;
+
+  // ── Helpers ───────────────────────────────────────────────────
+  function $w(name) {
+    return document.getElementById('ce-' + name + '-' + WID);
+  }
+
+  function showMsg(text, type) {
+    var el = $w('msg');
+    if (!el) return;
+    el.textContent  = text;
+    el.style.display = 'block';
+    var map = {
+      success: { bg: '#e8f5e9', color: '#2e7d32' },
+      warning: { bg: '#fff3cd', color: '#856404' },
+      error:   { bg: '#ffebee', color: '#c62828' },
+      loading: { bg: '#f0f0f0', color: '#555'    },
+    };
+    var s = map[type] || map.loading;
+    el.style.background = s.bg;
+    el.style.color      = s.color;
+  }
+
+  // ── Boot ─────────────────────────────────────────────────────
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
+  }
+
+  function boot() {
+    loadConfig();
+    setupCheckoutInterception();
+  }
+
+  // ── Load cities + config ──────────────────────────────────────
+  async function loadConfig() {
+    try {
+      var res  = await fetch('/apps/proxy/api/cities?shop=' + encodeURIComponent(SHOP));
+      var data = await res.json();
+      if (!data.success) return;
+
+      populateCities(data.cities || []);
+      appConfig = data.config || {};
+      window.__ceCfg = appConfig; // expose for interception
+
+      applyPickupConfig();
+      $w('city').addEventListener('change', onCityChange);
+      restoreFromLocalStorage();
+
+    } catch (err) {
+      showMsg('❌ Error al cargar configuración', 'error');
+    }
+  }
+
+  function populateCities(cities) {
+    var select = $w('city');
+    cities.forEach(function(city) {
+      var opt       = document.createElement('option');
+      opt.value     = city.name;
+      opt.textContent = city.name;
+      select.appendChild(opt);
+    });
+  }
+
+  // ── Pickup ────────────────────────────────────────────────────
+  function applyPickupConfig() {
+    if (!appConfig.pickupEnabled) return;
+
+    var section = document.getElementById('ce-pickup-section-' + WID);
+    if (section) section.style.display = 'block';
+
+    var labelEl = document.getElementById('ce-pickup-label-' + WID);
+    if (labelEl) labelEl.textContent = appConfig.pickupLabel || 'Recoger en tienda';
+
+    var checkbox = document.getElementById('ce-pickup-' + WID);
+    if (checkbox) {
+      checkbox.addEventListener('change', function(e) {
+        applyPickupState(e.target.checked);
+      });
+      if (localStorage.getItem(LSK + '_pickup') === 'true') {
+        checkbox.checked = true;
+        applyPickupState(true);
+      }
+    }
+  }
+
+  function applyPickupState(checked) {
+    pickupSelected = checked;
+    var deliveryDiv = document.getElementById('ce-delivery-' + WID);
+    if (deliveryDiv) deliveryDiv.style.display = checked ? 'none' : 'block';
+
+    if (checked) {
+      localStorage.setItem(LSK + '_pickup', 'true');
+      localStorage.removeItem(LSK + '_city');
+      localStorage.removeItem(LSK + '_date');
+      updateCartAttributes({ delivery_type: 'pickup', delivery_city: '', delivery_date: '' });
+    } else {
+      localStorage.removeItem(LSK + '_pickup');
+      updateCartAttributes({ delivery_type: 'delivery' });
+    }
+    notifyState();
+  }
+
+  // ── City change ───────────────────────────────────────────────
+  async function onCityChange() {
+    var city = $w('city').value;
+
+    if (!city) {
+      if (fpInstance) { fpInstance.destroy(); fpInstance = null; }
+      document.getElementById('ce-date-wrapper-' + WID).style.display = 'none';
+      localStorage.removeItem(LSK + '_city');
+      localStorage.removeItem(LSK + '_date');
+      deliverySelected = false;
+      $w('msg').style.display = 'none';
+      notifyState();
+      return;
+    }
+
+    showMsg('⏳ Cargando fechas disponibles...', 'loading');
+
+    try {
+      var res  = await fetch(
+        '/apps/proxy/api/availability?city=' + encodeURIComponent(city) +
+        '&shop=' + encodeURIComponent(SHOP)
+      );
+      var data = await res.json();
+
+      if (data.success && data.availableDates && data.availableDates.length > 0) {
+        document.getElementById('ce-date-wrapper-' + WID).style.display = 'block';
+        initFlatpickr(city, data.availableDates);
+      } else {
+        document.getElementById('ce-date-wrapper-' + WID).style.display = 'none';
+        showMsg('⚠️ No hay fechas disponibles para esta ciudad', 'warning');
+      }
+    } catch (err) {
+      showMsg('❌ Error al cargar fechas disponibles', 'error');
+    }
+  }
+
+  // ── Flatpickr ─────────────────────────────────────────────────
+  function initFlatpickr(city, availableDates) {
+    loadFlatpickrLib(function() {
+      if (fpInstance) fpInstance.destroy();
+
+      var savedCity = localStorage.getItem(LSK + '_city');
+      var savedDate = localStorage.getItem(LSK + '_date');
+      var defaultDate = (savedCity === city && savedDate && availableDates.includes(savedDate))
+        ? savedDate
+        : null;
+
+      fpInstance = flatpickr('#ce-date-' + WID, {
+        locale:      'es',
+        dateFormat:  'Y-m-d',
+        minDate:     availableDates[0],
+        enable:      availableDates,
+        inline:      true,
+        defaultDate: defaultDate,
+        onChange: function(dates, dateStr) {
+          onDateSelected(city, dateStr);
+        },
+      });
+
+      if (defaultDate) {
+        // Pre-selected date already restored
+        onDateSelected(city, defaultDate);
+      } else {
+        showMsg('✅ ' + availableDates.length + ' fecha(s) disponible(s)', 'success');
+      }
+    });
+  }
+
+  function loadFlatpickrLib(callback) {
+    if (window.__ceFpReady) { callback(); return; }
+    if (window.__ceFpLoading) {
+      var t = setInterval(function() {
+        if (window.__ceFpReady) { clearInterval(t); callback(); }
+      }, 50);
+      return;
+    }
+    window.__ceFpLoading = true;
+
+    if (!document.querySelector('link[href*="flatpickr"]')) {
+      var css = document.createElement('link');
+      css.rel  = 'stylesheet';
+      css.href = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css';
+      document.head.appendChild(css);
+    }
+
+    if (typeof flatpickr !== 'undefined') {
+      window.__ceFpReady = true;
+      callback();
+      return;
+    }
+
+    var s1 = document.createElement('script');
+    s1.src    = 'https://cdn.jsdelivr.net/npm/flatpickr';
+    s1.onload = function() {
+      var s2 = document.createElement('script');
+      s2.src    = 'https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js';
+      s2.onload = function() { window.__ceFpReady = true; callback(); };
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s1);
+  }
+
+  // ── Date selected ─────────────────────────────────────────────
+  function onDateSelected(city, dateStr) {
+    localStorage.setItem(LSK + '_city', city);
+    localStorage.setItem(LSK + '_date', dateStr);
+    updateCartAttributes({ delivery_city: city, delivery_date: dateStr, delivery_type: 'delivery' });
+    deliverySelected = true;
+    showMsg('✅ Entrega: ' + city + ' · ' + dateStr, 'success');
+    notifyState();
+  }
+
+  // ── Cart attributes ───────────────────────────────────────────
+  async function updateCartAttributes(attrs) {
+    try {
+      var fd = new FormData();
+      Object.entries(attrs).forEach(function(pair) {
+        fd.append('attributes[' + pair[0] + ']', pair[1]);
+      });
+      await fetch('/cart/update.js', { method: 'POST', body: fd });
+    } catch (_) {
+      // localStorage is the fallback; cart update failure is non-blocking
+    }
+  }
+
+  // ── Restore selection ─────────────────────────────────────────
+  function restoreFromLocalStorage() {
+    var savedCity = localStorage.getItem(LSK + '_city');
+    if (!savedCity) { restoreFromCartAttributes(); return; }
+
+    var select  = $w('city');
+    var options = Array.from(select.options);
+    var match   = options.find(function(o) { return o.value === savedCity; });
+    if (match) {
+      select.value = savedCity;
+      onCityChange();
+    }
+  }
+
+  async function restoreFromCartAttributes() {
+    try {
+      var res  = await fetch('/cart.js');
+      var cart = await res.json();
+      var attrs = cart.attributes || {};
+      if (attrs.delivery_city) {
+        localStorage.setItem(LSK + '_city', attrs.delivery_city);
+        if (attrs.delivery_date) {
+          localStorage.setItem(LSK + '_date', attrs.delivery_date);
+        }
+        restoreFromLocalStorage();
+      }
+    } catch (_) {}
+  }
+
+  // ── Checkout interception (Fase 4) ────────────────────────────
+  function setupCheckoutInterception() {
+    // Register only once per page across multiple block instances
+    if (window.__ceInterceptor) return;
+    window.__ceInterceptor = true;
+
+    document.addEventListener('submit', onFormSubmit,  true);
+    document.addEventListener('click',  onLinkClick,   true);
+
+    // MutationObserver: re-attach custom-class listeners on DOM changes
+    var mo = new MutationObserver(attachCustomClassListeners);
+    mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function requiresSelection() {
+    var cfg = window.__ceCfg;
+    return !cfg || cfg.requireDelivery !== false;
+  }
+
+  function canCheckout() {
+    if (!requiresSelection()) return true;
+    return deliverySelected || pickupSelected;
+  }
+
+  function alertAndScroll() {
+    var widget = document.getElementById('ce-widget-' + WID);
+    if (widget) widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function() {
+      alert('⚠️ Por favor selecciona una ciudad y fecha de entrega antes de continuar al checkout.');
+    }, 300);
+  }
+
+  function onFormSubmit(e) {
+    var form   = e.target;
+    var action = (form.action || '').toLowerCase();
+    var hasBtn = form.querySelector('[name="checkout"]');
+    if (!action.includes('/checkout') && !hasBtn) return;
+
+    if (!canCheckout()) {
+      e.preventDefault();
+      e.stopPropagation();
+      alertAndScroll();
+      return;
+    }
+
+    injectCityIntoForm(form);
+  }
+
+  function onLinkClick(e) {
+    var link = e.target.closest('a[href*="/checkout"]');
+    if (!link) return;
+
+    if (!canCheckout()) {
+      e.preventDefault();
+      e.stopPropagation();
+      alertAndScroll();
+      return;
+    }
+
+    var city = localStorage.getItem(LSK + '_city');
+    if (city && !pickupSelected) {
+      try {
+        var url = new URL(link.href);
+        url.searchParams.set('checkout[shipping_address][city]', city);
+        link.href = url.toString();
+      } catch (_) {}
+    }
+  }
+
+  function injectCityIntoForm(form) {
+    var city = localStorage.getItem(LSK + '_city');
+    if (!city || pickupSelected) return;
+
+    var field = 'checkout[shipping_address][city]';
+    if (!form.querySelector('[name="' + field + '"]')) {
+      var inp   = document.createElement('input');
+      inp.type  = 'hidden';
+      inp.name  = field;
+      inp.value = city;
+      form.appendChild(inp);
+    }
+  }
+
+  function attachCustomClassListeners() {
+    var cfg     = window.__ceCfg || {};
+    var raw     = cfg.checkoutButtonClasses || '';
+    if (!raw) return;
+
+    var classes;
+    try {
+      var parsed = JSON.parse(raw);
+      classes = Array.isArray(parsed) ? parsed : [];
+    } catch (_) {
+      classes = raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    }
+
+    classes.forEach(function(cls) {
+      document.querySelectorAll('.' + CSS.escape(cls)).forEach(function(btn) {
+        if (btn.dataset.ceIntercepted) return;
+        btn.dataset.ceIntercepted = '1';
+        btn.addEventListener('click', function(e) {
+          if (!canCheckout()) {
+            e.preventDefault();
+            e.stopPropagation();
+            alertAndScroll();
+          }
+        }, true);
+      });
+    });
+  }
+
+  // ── Global state for multi-widget coordination ─────────────────
+  function notifyState() {
+    window.__ceReady = deliverySelected || pickupSelected;
+  }
+
+})();
+</script>
+
+{% schema %}
+{
+  "name": "Calendario de Entregas",
+  "settings": [
+    {
+      "type": "checkbox",
+      "id": "show_title",
+      "label": "Mostrar título",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "widget_title",
+      "label": "Título del bloque",
+      "default": "📅 Selecciona tu fecha de entrega"
+    }
+  ],
+  "presets": [
+    {
+      "name": "Calendario de Entregas"
+    }
+  ]
+}
+{% endschema %}
