@@ -22,7 +22,7 @@ export const loader = async ({ request }) => {
       return new Response(null, {
         status: 302,
         headers: {
-          Location: "/app/installer"
+          Location: "/app"
         }
       });
     }
@@ -33,7 +33,7 @@ export const loader = async ({ request }) => {
     const billingResponse = await billing.request({
       plan: "Plan Pro",
       isTest: process.env.BILLING_TEST_MODE === "true",
-      returnUrl: `${process.env.SHOPIFY_APP_URL}/app/installer`
+      returnUrl: `${process.env.SHOPIFY_APP_URL}/app`
     });
 
     logger.info("billing", "Cargo creado, redirigiendo a confirmationUrl", {

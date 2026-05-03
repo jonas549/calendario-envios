@@ -73,8 +73,14 @@
   }
 
   function isPickup() {
-    if (window.__ceState) return !!window.__ceState.pickup;
-    return localStorage.getItem(LSK + '_pickup') === 'true';
+    // Usa OR: si cualquiera de las dos fuentes dice pickup, es pickup.
+    // Necesario por race condition: window.__ceState puede estar temporalmente
+    // desactualizado si restoreFromCartAttributes() corre tras applyPickupState().
+    var statePickup = window.__ceState ? !!window.__ceState.pickup : false;
+    var lsPickup    = localStorage.getItem(LSK + '_pickup') === 'true';
+    var result      = statePickup || lsPickup;
+    console.log('[Calendify Embed] isPickup – __ceState:', statePickup, '| localStorage:', lsPickup, '→', result);
+    return result;
   }
 
   function getCity() {
