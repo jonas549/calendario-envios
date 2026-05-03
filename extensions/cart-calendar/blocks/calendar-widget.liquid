@@ -120,12 +120,37 @@
 <link rel="stylesheet" href="{{ 'calendar.css' | asset_url }}">
 
 <script>
+// ── Selectores de detección automática (Capa 1) ───────────────
+// Compartidos entre el widget principal y el modo selección visual.
+var CE_AUTO_SELECTORS = [
+  '[name="checkout"]',
+  'button[name="checkout"]',
+  'input[name="checkout"]',
+  'shopify-buy-it-now-button',
+  'shopify-payment-button',
+  '.shopify-payment-button__button',
+  '.cart__checkout-button',
+  '.cart-checkout-button',
+  '#CartSubmit',
+  '.cart__submit',
+  '.cart__checkout',
+  '.cart-form__checkout',
+  '[data-checkout-url]',
+  '[data-action="checkout"]',
+  '.product-form__buy-it-now',
+  '.dynamic-checkout__content button',
+  'a[href="/checkout"]',
+];
+
+// ── Widget principal ──────────────────────────────────────────
 (function() {
   'use strict';
 
   var SHOP = {{ shop.permanent_domain | json }};
   var WID  = {{ wid | json }};
   var LSK  = 'ce_' + SHOP.replace(/\./g, '_');
+
+  window.__ceShop = SHOP;
 
   var appConfig        = {};
   var fpInstance       = null;
@@ -336,12 +361,10 @@
       });
 
       if (defaultDate) {
-        // Selección restaurada: mostrar fecha en trigger, mantener cerrado
         updateDateDisplay(defaultDate);
         closeCalPanel();
         onDateSelected(city, defaultDate);
       } else {
-        // Primera selección de esta ciudad: abrir automáticamente
         openCalPanel();
         showMsg('✅ ' + availableDates.length + ' fecha(s) disponible(s) — elige una', 'success');
       }
@@ -435,7 +458,7 @@
     // elemento (incluido el connectedCallback de shopify-buy-it-now-button)
     document.addEventListener('click',  onCustomBtnClick, true);
 
-    var mo = new MutationObserver(attachCustomClassListeners);
+    var mo = new MutationObserver(markInterceptedButtons);
     mo.observe(document.body, { childList: true, subtree: true });
   }
 
@@ -507,33 +530,59 @@
     }
   }
 
-  // ── Custom-class button interception (Buy it now / botones de tema) ──
-  function getInterceptedClasses() {
-    var cfg = window.__ceCfg || {};
-    var raw = cfg.checkoutButtonClasses || '';
-    if (!raw) return [];
-    try {
-      var parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch (_) {
-      return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+  // ── Interceptación combinada: Capa 1 (auto) + Capa 2 (manual) ──
+  function getInterceptedSelectors() {
+    var selectors = CE_AUTO_SELECTORS.slice();
+    var cfg       = window.__ceCfg || {};
+
+    // Legacy: checkoutButtonClasses (nombres de clase, comma-separated o JSON)
+    var legacyRaw = cfg.checkoutButtonClasses || '';
+    if (legacyRaw) {
+      try {
+        var parsed = JSON.parse(legacyRaw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach(function(cls) { if (cls) selectors.push('.' + CSS.escape(cls)); });
+        }
+      } catch (_) {
+        legacyRaw.split(',').forEach(function(cls) {
+          cls = cls.trim();
+          if (cls) selectors.push('.' + CSS.escape(cls));
+        });
+      }
     }
+
+    // Nuevo: selectedButtonSelectors (selectores CSS guardados desde modo selección visual)
+    try {
+      var selected = JSON.parse(cfg.selectedButtonSelectors || '[]');
+      if (Array.isArray(selected)) {
+        selected.forEach(function(sel) { if (sel) selectors.push(sel); });
+      }
+    } catch (_) {}
+
+    return selectors;
   }
 
   function onCustomBtnClick(e) {
-    var classes = getInterceptedClasses();
-    if (!classes.length) return;
+    // No interceptar durante el modo de selección visual
+    if (window.__ceSelectionMode) return;
+
+    var selectors = getInterceptedSelectors();
 
     var btn = null;
-    for (var i = 0; i < classes.length; i++) {
+    for (var i = 0; i < selectors.length; i++) {
       try {
-        var found = e.target.closest('.' + CSS.escape(classes[i]));
+        var found = e.target.closest(selectors[i]);
         if (found) { btn = found; break; }
       } catch (_) {}
     }
     if (!btn) return;
 
-    console.log('[Calendify-Debug] click capturado (document-capture) btn:', btn.className);
+    // Confirmar que es un botón de checkout: prevenir default y detener propagación
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    console.log('[Calendify-Debug] click capturado (document-capture) btn:', btn.tagName, btn.className);
     console.log('[Calendify-Debug] localStorage city:', localStorage.getItem(LSK + '_city'),
                 '| date:', localStorage.getItem(LSK + '_date'));
     console.log('[Calendify-Debug] deliverySelected:', deliverySelected,
@@ -541,19 +590,10 @@
                 '| canCheckout():', canCheckout());
 
     if (!canCheckout()) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
       console.log('[Calendify-Debug] checkout BLOQUEADO – sin ciudad/fecha seleccionada');
       alertAndScroll();
       return;
     }
-
-    // Detener el click: shopify-buy-it-now-button no lo recibe.
-    // En su lugar redirigimos a /checkout con la ciudad en la URL,
-    // exactamente como hacía el legacy api.script.js.
-    e.stopPropagation();
-    e.stopImmediatePropagation();
 
     var city = !pickupSelected ? (localStorage.getItem(LSK + '_city') || '') : '';
     var date = !pickupSelected ? (localStorage.getItem(LSK + '_date') || '') : '';
@@ -583,14 +623,16 @@
       });
   }
 
-  function attachCustomClassListeners() {
-    var classes = getInterceptedClasses();
-    classes.forEach(function(cls) {
-      document.querySelectorAll('.' + CSS.escape(cls)).forEach(function(btn) {
-        if (btn.dataset.ceIntercepted) return;
-        btn.dataset.ceIntercepted = '1';
-        console.log('[Calendify-Debug] botón marcado para interceptación:', btn.className);
-      });
+  function markInterceptedButtons() {
+    var selectors = getInterceptedSelectors();
+    selectors.forEach(function(sel) {
+      try {
+        document.querySelectorAll(sel).forEach(function(btn) {
+          if (btn.dataset.ceIntercepted) return;
+          btn.dataset.ceIntercepted = '1';
+          console.log('[Calendify-Debug] botón marcado para interceptación:', sel);
+        });
+      } catch (_) {}
     });
   }
 
@@ -599,6 +641,158 @@
     window.__ceReady = deliverySelected || pickupSelected;
   }
 
+})();
+
+// ── Modo selección visual (ce_select_mode=1) ──────────────────
+(function() {
+  var u = new URL(window.location.href);
+  if (u.searchParams.get('ce_select_mode') !== '1') return;
+
+  window.__ceSelectionMode = true;
+
+  var shopDomain       = window.__ceShop
+    || (window.Shopify && window.Shopify.shop)
+    || window.location.hostname;
+  var selectedSelectors = [];
+
+  // Estilos del modo selección
+  var style = document.createElement('style');
+  style.textContent =
+    '#ce-select-bar{position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#1a1a2e;' +
+    'color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;' +
+    'font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:13px;' +
+    'box-shadow:0 2px 8px rgba(0,0,0,.4);}' +
+    '#ce-select-bar strong{font-size:14px;}' +
+    '#ce-bar-info{flex:1;color:#bbb;font-size:12px;}' +
+    '#ce-select-bar button{border:none;border-radius:4px;padding:6px 14px;' +
+    'cursor:pointer;font-size:13px;font-weight:600;}' +
+    '#ce-btn-save{background:#00cc66;color:#000;}' +
+    '#ce-btn-save:hover{background:#00aa55;}' +
+    '#ce-btn-save:disabled{background:#444;color:#777;cursor:not-allowed;}' +
+    '#ce-btn-cancel{background:transparent;color:#aaa;border:1px solid #555 !important;}' +
+    '#ce-btn-cancel:hover{color:#fff;border-color:#aaa !important;}' +
+    '#ce-sel-count{color:#fff;font-weight:600;white-space:nowrap;}' +
+    '.ce-sel-hl{outline:3px dashed #ff9900 !important;outline-offset:4px !important;' +
+    'cursor:crosshair !important;transition:outline-color .15s;}' +
+    '.ce-sel-hl.ce-sel-on{outline-color:#00cc66 !important;' +
+    'background:rgba(0,204,102,.10) !important;}';
+  document.head.appendChild(style);
+
+  function renderBar() {
+    var bar = document.createElement('div');
+    bar.id  = 'ce-select-bar';
+    bar.innerHTML =
+      '<strong>&#127919; Modo selecci&oacute;n &mdash; Calendify</strong>' +
+      '<span id="ce-bar-info">Haz clic en los botones de checkout que quieres interceptar</span>' +
+      '<span id="ce-sel-count">0 seleccionados</span>' +
+      '<button id="ce-btn-save" disabled>Guardar</button>' +
+      '<button id="ce-btn-cancel">Cancelar</button>';
+    document.body.insertBefore(bar, document.body.firstChild);
+    document.body.style.paddingTop = '54px';
+
+    document.getElementById('ce-btn-save').addEventListener('click', onSave);
+    document.getElementById('ce-btn-cancel').addEventListener('click', closeSelectionMode);
+  }
+
+  function updateCount() {
+    var n   = selectedSelectors.length;
+    var cnt = document.getElementById('ce-sel-count');
+    if (cnt) cnt.textContent = n + (n === 1 ? ' seleccionado' : ' seleccionados');
+    var btn = document.getElementById('ce-btn-save');
+    if (btn) btn.disabled = (n === 0);
+  }
+
+  // Construye el selector CSS más específico posible para un elemento
+  function buildSelector(el) {
+    if (el.id && !/^\d/.test(el.id)) return '#' + CSS.escape(el.id);
+    var tag = el.tagName.toLowerCase();
+    var cls = Array.from(el.classList)
+      .filter(function(c) { return !c.startsWith('ce-'); })
+      .slice(0, 2)
+      .map(function(c) { return '.' + CSS.escape(c); })
+      .join('');
+    if (cls) return tag + cls;
+    var name = el.getAttribute('name');
+    if (name) return tag + '[name="' + name + '"]';
+    return tag;
+  }
+
+  function highlightButton(el) {
+    if (el._ceHl) return;
+    el._ceHl = true;
+    el.classList.add('ce-sel-hl');
+
+    el.addEventListener('click', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      var sel = buildSelector(el);
+      var idx = selectedSelectors.indexOf(sel);
+      if (idx === -1) {
+        selectedSelectors.push(sel);
+        el.classList.add('ce-sel-on');
+      } else {
+        selectedSelectors.splice(idx, 1);
+        el.classList.remove('ce-sel-on');
+      }
+      updateCount();
+    }, true);
+  }
+
+  function scanButtons() {
+    CE_AUTO_SELECTORS.forEach(function(sel) {
+      try {
+        document.querySelectorAll(sel).forEach(highlightButton);
+      } catch (_) {}
+    });
+  }
+
+  function onSave() {
+    var btn = document.getElementById('ce-btn-save');
+    btn.disabled    = true;
+    btn.textContent = 'Guardando...';
+
+    fetch('/apps/proxy/api/button-selectors', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ shop: shopDomain, selectors: selectedSelectors }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        btn.textContent       = '✅ Guardado';
+        btn.style.background  = '#00cc66';
+        setTimeout(closeSelectionMode, 1200);
+      } else {
+        btn.textContent = '❌ Error — reintentar';
+        btn.disabled    = false;
+      }
+    })
+    .catch(function() {
+      btn.textContent = '❌ Error — reintentar';
+      var b = document.getElementById('ce-btn-save');
+      if (b) b.disabled = false;
+    });
+  }
+
+  function closeSelectionMode() {
+    var cu = new URL(window.location.href);
+    cu.searchParams.delete('ce_select_mode');
+    window.location.href = cu.toString();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      renderBar();
+      scanButtons();
+      new MutationObserver(scanButtons).observe(document.body, { childList: true, subtree: true });
+    });
+  } else {
+    renderBar();
+    scanButtons();
+    new MutationObserver(scanButtons).observe(document.body, { childList: true, subtree: true });
+  }
 })();
 </script>
 

@@ -25,6 +25,7 @@ export const loader = async ({ request }) => {
           pickupLabel: true,
           checkoutButtonClasses: true,
           requireDelivery: true,
+          selectedButtonSelectors: true,
         },
       }),
     ]);
@@ -37,6 +38,7 @@ export const loader = async ({ request }) => {
         pickupLabel: config?.pickupLabel ?? "Recoger en tienda",
         checkoutButtonClasses: config?.checkoutButtonClasses ?? "",
         requireDelivery: config?.requireDelivery ?? true,
+        selectedButtonSelectors: config?.selectedButtonSelectors ?? "[]",
       },
     });
   } catch (error) {

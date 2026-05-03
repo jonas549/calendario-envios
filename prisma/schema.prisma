@@ -61,9 +61,10 @@ model Config {
   additionalMessage     String   @default("")
   pickupEnabled         Boolean  @default(false)
   pickupLabel           String   @default("Recoger en tienda")
-  checkoutButtonClasses String   @default("")
-  requireDelivery       Boolean  @default(true)
-  updatedAt             DateTime @updatedAt
+  checkoutButtonClasses   String   @default("")
+  requireDelivery         Boolean  @default(true)
+  selectedButtonSelectors String   @default("[]")
+  updatedAt               DateTime @updatedAt
 
   @@index([shop])
 }

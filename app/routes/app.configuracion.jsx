@@ -11,6 +11,9 @@ import {
   Banner,
   Checkbox,
   Box,
+  InlineStack,
+  Badge,
+  Divider,
 } from "@shopify/polaris";
 import { useState } from "react";
 import { useLoaderData, useFetcher } from "react-router";
@@ -25,6 +28,7 @@ export const loader = async ({ request }) => {
   const config = await prisma.config.findUnique({ where: { shop } });
 
   return {
+    shop,
     config: config || {
       mode: "mismo_dia",
       daysAhead: 1,
@@ -33,16 +37,32 @@ export const loader = async ({ request }) => {
       pickupLabel: "Recoger en tienda",
       checkoutButtonClasses: "",
       requireDelivery: true,
+      selectedButtonSelectors: "[]",
     },
   };
 };
 
 export const action = async ({ request }) => {
-  logger.info("configuracion", "Action recibido — inicio");
-
   const { admin, session } = await authenticate.admin(request);
   const shop = session.shop;
   const formData = await request.formData();
+
+  // Acción separada: limpiar selectores visuales
+  if (formData.get("_action") === "clearSelectors") {
+    try {
+      await prisma.config.upsert({
+        where:  { shop },
+        create: { shop, selectedButtonSelectors: "[]" },
+        update: { selectedButtonSelectors: "[]" },
+      });
+      return { success: true, cleared: true };
+    } catch (err) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  // Acción normal: guardar configuración general
+  logger.info("configuracion", "Action recibido — inicio");
 
   const configData = {
     mode: formData.get("mode"),
@@ -50,7 +70,7 @@ export const action = async ({ request }) => {
     additionalMessage: formData.get("additionalMessage") || "",
     pickupEnabled: formData.get("pickupEnabled") === "true",
     pickupLabel: formData.get("pickupLabel") || "Recoger en tienda",
-    checkoutButtonClasses: formData.get("checkoutButtonClasses") || "",
+    checkoutButtonClasses: "",   // deprecated — gestionado via selector visual
     requireDelivery: formData.get("requireDelivery") === "true",
   };
 
@@ -58,17 +78,16 @@ export const action = async ({ request }) => {
 
   try {
     await prisma.config.upsert({
-      where: { shop },
+      where:  { shop },
       create: { shop, ...configData },
       update: configData,
     });
 
-    // Backup en metafields de Shopify
     const shopResponse = await admin.graphql(`#graphql
       query { shop { id } }
     `);
     const shopData = await shopResponse.json();
-    const shopId = shopData.data.shop.id;
+    const shopId   = shopData.data.shop.id;
 
     await admin.graphql(
       `#graphql
@@ -82,10 +101,10 @@ export const action = async ({ request }) => {
         variables: {
           input: [{
             namespace: "calendario_envios",
-            key: "config",
-            type: "json",
-            value: JSON.stringify(configData),
-            ownerId: shopId,
+            key:       "config",
+            type:      "json",
+            value:     JSON.stringify(configData),
+            ownerId:   shopId,
           }],
         },
       }
@@ -94,46 +113,57 @@ export const action = async ({ request }) => {
     logger.info("configuracion", "Config guardada exitosamente", null, shop);
     return { success: true };
   } catch (error) {
-    logger.error(
-      "configuracion",
-      "Error guardando config",
-      { error: error.message },
-      shop
-    );
+    logger.error("configuracion", "Error guardando config", { error: error.message }, shop);
     return { success: false, error: error.message };
   }
 };
 
 export default function Configuracion() {
-  const { config } = useLoaderData();
-  // useFetcher: submisión background sin navegación — necesario en iframe Shopify
+  const { config, shop } = useLoaderData();
   const fetcher = useFetcher();
 
-  const [mode, setMode] = useState(config.mode);
-  const [daysAhead, setDaysAhead] = useState(String(config.daysAhead));
+  const [mode,              setMode]              = useState(config.mode);
+  const [daysAhead,         setDaysAhead]         = useState(String(config.daysAhead));
   const [additionalMessage, setAdditionalMessage] = useState(config.additionalMessage || "");
-  const [pickupEnabled, setPickupEnabled] = useState(config.pickupEnabled ?? false);
-  const [pickupLabel, setPickupLabel] = useState(config.pickupLabel || "Recoger en tienda");
-  const [requireDelivery, setRequireDelivery] = useState(config.requireDelivery ?? true);
-  const [checkoutButtonClasses, setCheckoutButtonClasses] = useState(config.checkoutButtonClasses || "");
+  const [pickupEnabled,     setPickupEnabled]     = useState(config.pickupEnabled ?? false);
+  const [pickupLabel,       setPickupLabel]       = useState(config.pickupLabel || "Recoger en tienda");
+  const [requireDelivery,   setRequireDelivery]   = useState(config.requireDelivery ?? true);
 
-  const isSaving  = fetcher.state !== "idle";
-  const saveResult = fetcher.data;
+  const [selectedSelectors, setSelectedSelectors] = useState(() => {
+    try { return JSON.parse(config.selectedButtonSelectors || "[]"); }
+    catch (_) { return []; }
+  });
+
+  const storeUrl     = "https://" + shop;
+  const selModeUrl   = storeUrl + "/cart?ce_select_mode=1";
+  const isSaving     = fetcher.state !== "idle";
+  const saveResult   = fetcher.data;
 
   const handleSave = () => {
     const fd = new FormData();
-    fd.append("mode", mode);
-    fd.append("daysAhead", daysAhead);
+    fd.append("mode",              mode);
+    fd.append("daysAhead",         daysAhead);
     fd.append("additionalMessage", additionalMessage);
-    fd.append("pickupEnabled", String(pickupEnabled));
-    fd.append("pickupLabel", pickupLabel);
-    fd.append("requireDelivery", String(requireDelivery));
-    fd.append("checkoutButtonClasses", checkoutButtonClasses);
+    fd.append("pickupEnabled",     String(pickupEnabled));
+    fd.append("pickupLabel",       pickupLabel);
+    fd.append("requireDelivery",   String(requireDelivery));
     fetcher.submit(fd, { method: "post" });
   };
 
+  const handleClearSelectors = () => {
+    const fd = new FormData();
+    fd.append("_action", "clearSelectors");
+    fetcher.submit(fd, { method: "post" });
+    setSelectedSelectors([]);
+  };
+
+  // Actualizar lista local si el servidor limpió
+  if (saveResult?.cleared && selectedSelectors.length > 0) {
+    setSelectedSelectors([]);
+  }
+
   const modeOptions = [
-    { label: "Mismo día (si pides antes de la hora de corte, llega hoy)", value: "mismo_dia" },
+    { label: "Mismo día (si pides antes de la hora de corte, llega hoy)",       value: "mismo_dia"  },
     { label: "Día futuro (si pides antes de la hora de corte, llega en X días)", value: "dia_futuro" },
   ];
 
@@ -144,16 +174,15 @@ export default function Configuracion() {
           <Box paddingBlockEnd="800">
             <BlockStack gap="500">
 
-              {/* ── Feedback de guardado ── */}
-              {saveResult?.success === true && (
-                <Banner tone="success" onDismiss={() => fetcher.data = null}>
-                  ✅ Configuración guardada correctamente
-                </Banner>
+              {/* ── Feedback ── */}
+              {saveResult?.success === true && !saveResult?.cleared && (
+                <Banner tone="success">✅ Configuración guardada correctamente</Banner>
+              )}
+              {saveResult?.cleared && (
+                <Banner tone="success">✅ Selectores personalizados eliminados</Banner>
               )}
               {saveResult?.success === false && (
-                <Banner tone="critical">
-                  ❌ Error al guardar: {saveResult.error}
-                </Banner>
+                <Banner tone="critical">❌ Error al guardar: {saveResult.error}</Banner>
               )}
 
               {/* ── Sección 1: Modo de corte ── */}
@@ -161,18 +190,15 @@ export default function Configuracion() {
                 <FormLayout>
                   <BlockStack gap="400">
                     <Text as="h2" variant="headingMd">Modo de corte de envío</Text>
-
                     <Text as="p" tone="subdued">
                       ⚠️ La hora de corte se configura por ciudad en la sección "Ciudades".
                     </Text>
-
                     <Select
                       label="Selecciona el modo"
                       options={modeOptions}
                       value={mode}
                       onChange={setMode}
                     />
-
                     {mode === "dia_futuro" && (
                       <TextField
                         label="Días de anticipación"
@@ -183,7 +209,6 @@ export default function Configuracion() {
                         helpText="Número de días mínimos desde el pedido hasta la entrega"
                       />
                     )}
-
                     <TextField
                       label="Mensaje adicional (opcional)"
                       value={additionalMessage}
@@ -196,7 +221,7 @@ export default function Configuracion() {
                 </FormLayout>
               </Card>
 
-              {/* ── Sección 2: Recogida en tienda ── */}
+              {/* ── Sección 2: Recogida ── */}
               <Card>
                 <BlockStack gap="400">
                   <Text as="h2" variant="headingMd">Recogida en tienda</Text>
@@ -204,13 +229,11 @@ export default function Configuracion() {
                     Permite que el cliente marque que retirará el pedido en tu local,
                     omitiendo la selección de ciudad y fecha.
                   </Text>
-
                   <Checkbox
                     label="Activar opción de recogida en tienda"
                     checked={pickupEnabled}
                     onChange={setPickupEnabled}
                   />
-
                   {pickupEnabled && (
                     <TextField
                       label="Texto del checkbox"
@@ -225,23 +248,8 @@ export default function Configuracion() {
 
               {/* ── Sección 3: Control de checkout ── */}
               <Card>
-                <BlockStack gap="400">
+                <BlockStack gap="500">
                   <Text as="h2" variant="headingMd">Control de checkout</Text>
-
-                  <Banner tone="warning">
-                    <BlockStack gap="200">
-                      <Text as="p" fontWeight="semibold">⚠️ Limitación con pagos acelerados</Text>
-                      <Text as="p">
-                        Los botones de <strong>Shop Pay</strong>, <strong>Apple Pay</strong> y{" "}
-                        <strong>Google Pay</strong> son iframes de Shopify y{" "}
-                        <strong>no pueden ser bloqueados</strong> por ninguna app.
-                        Para forzar selección de fecha, desactívalos en{" "}
-                        <strong>Configuración → Pagos → Métodos acelerados</strong>.
-                        Los datos de entrega <strong>sí se guardan</strong> en el pedido
-                        independientemente del método usado.
-                      </Text>
-                    </BlockStack>
-                  </Banner>
 
                   <Checkbox
                     label="Requerir selección de fecha antes del checkout"
@@ -250,21 +258,85 @@ export default function Configuracion() {
                     helpText="El cliente no podrá ir al checkout sin seleccionar ciudad y fecha (o activar recogida)."
                   />
 
-                  <BlockStack gap="200">
-                    <Text as="p" variant="headingMd">Clases CSS adicionales (avanzado)</Text>
-                    <Text as="p" tone="subdued">
-                      Opcional. Si tu tema tiene botones de checkout con clases CSS no estándar,
-                      agrégalas separadas por coma. La interceptación universal ya cubre la mayoría
-                      de los temas sin necesidad de configurar esto.
-                    </Text>
-                    <TextField
-                      label="Clases CSS de botones de checkout"
-                      value={checkoutButtonClasses}
-                      onChange={setCheckoutButtonClasses}
-                      multiline={2}
-                      placeholder="btn-checkout, cart__checkout-button"
-                    />
+                  <Divider />
+
+                  {/* ── Detección automática ── */}
+                  <BlockStack gap="300">
+                    <Text as="h3" variant="headingMd">Botones de checkout</Text>
+
+                    <Banner tone="info">
+                      <BlockStack gap="200">
+                        <Text as="p" fontWeight="semibold">
+                          Detección automática activa — cubre el 85% de los temas
+                        </Text>
+                        <Text as="p">
+                          La app intercepta automáticamente los botones más comunes:{" "}
+                          <em>Check out</em>, <em>Buy it now</em> y variantes estándar de Shopify.
+                          Si tu tema usa botones con diseño personalizado, agrégalos con el
+                          selector visual de abajo.
+                        </Text>
+                      </BlockStack>
+                    </Banner>
+
+                    {/* ── Selectores configurados ── */}
+                    <BlockStack gap="200">
+                      <InlineStack align="space-between" blockAlign="center">
+                        <Text as="p" fontWeight="semibold">Botones personalizados configurados</Text>
+                        {selectedSelectors.length > 0 && (
+                          <Badge tone="success">{selectedSelectors.length} activos</Badge>
+                        )}
+                      </InlineStack>
+
+                      {selectedSelectors.length > 0 ? (
+                        <BlockStack gap="150">
+                          {selectedSelectors.map((sel, i) => (
+                            <Box
+                              key={i}
+                              background="bg-surface-secondary"
+                              padding="200"
+                              borderRadius="200"
+                            >
+                              <Text as="p" variant="bodySm" fontFamily="mono" breakWord>
+                                {sel}
+                              </Text>
+                            </Box>
+                          ))}
+                          <Box paddingBlockStart="100">
+                            <Button
+                              tone="critical"
+                              variant="plain"
+                              onClick={handleClearSelectors}
+                              disabled={isSaving}
+                            >
+                              Eliminar todos los botones personalizados
+                            </Button>
+                          </Box>
+                        </BlockStack>
+                      ) : (
+                        <Text as="p" tone="subdued">
+                          Ninguno configurado. La detección automática está activa.
+                        </Text>
+                      )}
+                    </BlockStack>
+
+                    {/* ── Botón de selector visual ── */}
+                    <BlockStack gap="200">
+                      <Text as="p" fontWeight="semibold">Agregar botones personalizados</Text>
+                      <Text as="p" tone="subdued">
+                        Abre tu tienda en modo selección. Los botones detectados se resaltarán —
+                        haz clic en los que quieras activar y guarda. No necesitas saber CSS.
+                      </Text>
+                      <InlineStack gap="300" blockAlign="center">
+                        <Button url={selModeUrl} external>
+                          Configurar botones visualmente
+                        </Button>
+                        <Text as="p" tone="subdued" variant="bodySm">
+                          Se abre en nueva pestaña. Navega a la página del carrito o producto.
+                        </Text>
+                      </InlineStack>
+                    </BlockStack>
                   </BlockStack>
+
                 </BlockStack>
               </Card>
 
