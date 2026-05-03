@@ -321,10 +321,13 @@
     if (window.__ceInterceptor) return;
     window.__ceInterceptor = true;
 
-    document.addEventListener('submit', onFormSubmit,  true);
-    document.addEventListener('click',  onLinkClick,   true);
+    document.addEventListener('submit', onFormSubmit,    true);
+    document.addEventListener('click',  onLinkClick,     true);
+    // Capture-phase listener at document level fires BEFORE any element-level
+    // handler (including shopify-buy-it-now-button's connectedCallback handler)
+    document.addEventListener('click',  onCustomBtnClick, true);
 
-    // MutationObserver: re-attach custom-class listeners on DOM changes
+    // MutationObserver: marks custom-class buttons as known on DOM changes
     var mo = new MutationObserver(attachCustomClassListeners);
     mo.observe(document.body, { childList: true, subtree: true });
   }
@@ -398,30 +401,90 @@
     }
   }
 
-  function attachCustomClassListeners() {
-    var cfg     = window.__ceCfg || {};
-    var raw     = cfg.checkoutButtonClasses || '';
-    if (!raw) return;
-
-    var classes;
+  // ── Custom-class button interception (Buy it now / template buttons) ──
+  function getInterceptedClasses() {
+    var cfg = window.__ceCfg || {};
+    var raw = cfg.checkoutButtonClasses || '';
+    if (!raw) return [];
     try {
       var parsed = JSON.parse(raw);
-      classes = Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch (_) {
-      classes = raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+      return raw.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+    }
+  }
+
+  function onCustomBtnClick(e) {
+    var classes = getInterceptedClasses();
+    if (!classes.length) return;
+
+    // Find the closest ancestor (or self) matching any intercepted class
+    var btn = null;
+    for (var i = 0; i < classes.length; i++) {
+      try {
+        var found = e.target.closest('.' + CSS.escape(classes[i]));
+        if (found) { btn = found; break; }
+      } catch (_) {}
+    }
+    if (!btn) return;
+
+    // Second pass of a re-triggered click after cart-attr flush
+    if (btn.dataset.ceBypassing) {
+      console.log('[Calendify] bypass activo – click pasa a Shopify');
+      delete btn.dataset.ceBypassing;
+      return;
     }
 
+    console.log('[Calendify] click capturado (document-capture) btn:', btn.className);
+    console.log('[Calendify] localStorage city:', localStorage.getItem(LSK + '_city'),
+                '| date:', localStorage.getItem(LSK + '_date'));
+    console.log('[Calendify] deliverySelected:', deliverySelected, '| pickupSelected:', pickupSelected);
+
+    if (!canCheckout()) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      console.log('[Calendify] checkout bloqueado – sin ciudad/fecha seleccionada');
+      alertAndScroll();
+      return;
+    }
+
+    // Stop this click so shopify-buy-it-now-button never sees it.
+    // We re-dispatch after the cart-attr flush completes.
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    var city = !pickupSelected ? (localStorage.getItem(LSK + '_city') || '') : '';
+    var date = !pickupSelected ? (localStorage.getItem(LSK + '_date') || '') : '';
+
+    console.log('[Calendify] flush cart attrs – city:', city, '| date:', date);
+
+    var fd = new FormData();
+    fd.append('attributes[delivery_type]',  pickupSelected ? 'pickup' : 'delivery');
+    fd.append('attributes[delivery_city]',  city);
+    fd.append('attributes[delivery_date]',  date);
+
+    fetch('/cart/update.js', { method: 'POST', body: fd })
+      .then(function(res) {
+        console.log('[Calendify] cart attrs guardados – status:', res.status);
+      })
+      .catch(function(err) {
+        console.warn('[Calendify] error guardando cart attrs:', err);
+      })
+      .finally(function() {
+        console.log('[Calendify] re-disparando click → Shopify procesa checkout');
+        btn.dataset.ceBypassing = '1';
+        btn.click();
+      });
+  }
+
+  function attachCustomClassListeners() {
+    var classes = getInterceptedClasses();
     classes.forEach(function(cls) {
       document.querySelectorAll('.' + CSS.escape(cls)).forEach(function(btn) {
         if (btn.dataset.ceIntercepted) return;
         btn.dataset.ceIntercepted = '1';
-        btn.addEventListener('click', function(e) {
-          if (!canCheckout()) {
-            e.preventDefault();
-            e.stopPropagation();
-            alertAndScroll();
-          }
-        }, true);
+        console.log('[Calendify] botón marcado para interceptación:', btn.className);
       });
     });
   }
@@ -437,6 +500,7 @@
 {% schema %}
 {
   "name": "Calendario de Entregas",
+  "target": "section",
   "settings": [
     {
       "type": "checkbox",
@@ -449,11 +513,6 @@
       "id": "widget_title",
       "label": "Título del bloque",
       "default": "📅 Selecciona tu fecha de entrega"
-    }
-  ],
-  "presets": [
-    {
-      "name": "Calendario de Entregas"
     }
   ]
 }
