@@ -1,40 +1,26 @@
 {% comment %}
   App Embed — target: body — inyectado en TODAS las páginas del tema.
-  Modo selección visual persistente entre páginas (?ce_select_mode=1 activa,
-  sessionStorage mantiene el modo y las selecciones mientras el merchant navega).
+
+  Parte 1: Interceptación universal de checkout (siempre activa en todas las páginas).
+  Parte 2: Modo selección visual (activo solo con ?ce_select_mode=1 o sessionStorage).
 {% endcomment %}
 <script>
 (function() {
   'use strict';
 
-  // ── sessionStorage keys ───────────────────────────────────────
-  var SS_MODE  = 'ce_sel_active';   // '1' cuando el modo está activo
-  var SS_SELS  = 'ce_sel_sels';     // JSON array de selectores acumulados
-  var SS_INTRO = 'ce_sel_intro';    // '1' después de mostrar el tooltip inicial
-
-  var urlMode = new URL(window.location.href).searchParams.get('ce_select_mode') === '1';
-  var ssMode  = sessionStorage.getItem(SS_MODE) === '1';
-
-  if (!urlMode && !ssMode) return;
-
-  // Primera activación = llega desde el link del admin (URL param, sin sesión previa)
-  var firstActivation = urlMode && !ssMode;
-
-  sessionStorage.setItem(SS_MODE, '1');
-  window.__ceSelectionMode = true;
+  console.log('[Calendify Embed] Script cargado en:', window.location.pathname);
 
   var SHOP = {{ shop.permanent_domain | json }};
+  var LSK  = 'ce_' + SHOP.replace(/\./g, '_');
 
-  // Cargar selecciones de páginas anteriores en esta sesión
-  var selected;
-  try { selected = JSON.parse(sessionStorage.getItem(SS_SELS) || '[]'); }
-  catch (_) { selected = []; }
+  window.__ceShop = SHOP;
 
-  function persistSelected() {
-    sessionStorage.setItem(SS_SELS, JSON.stringify(selected));
-  }
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 1 — INTERCEPTACIÓN UNIVERSAL DE CHECKOUT
+  // Se ejecuta en TODAS las páginas, siempre.
+  // ═══════════════════════════════════════════════════════════════
 
-  var CE_SELECTORS = [
+  var AUTO_SELECTORS = [
     '[name="checkout"]',
     'button[name="checkout"]',
     'input[name="checkout"]',
@@ -53,6 +39,261 @@
     '.dynamic-checkout__content button',
     'a[href="/checkout"]',
   ];
+
+  var savedSelectors = [];  // cargados asincrónicamente desde la API
+
+  function getAllSelectors() {
+    return AUTO_SELECTORS.concat(savedSelectors);
+  }
+
+  // Carga selectores guardados por el merchant (modo selección visual) desde la API
+  function loadSavedSelectors() {
+    fetch('/apps/proxy/api/button-selectors?shop=' + encodeURIComponent(SHOP))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.success && Array.isArray(data.selectors) && data.selectors.length) {
+          data.selectors.forEach(function(sel) {
+            if (sel && AUTO_SELECTORS.indexOf(sel) === -1 && savedSelectors.indexOf(sel) === -1) {
+              savedSelectors.push(sel);
+            }
+          });
+          console.log('[Calendify Embed] Selectores guardados cargados:', savedSelectors.length, savedSelectors);
+          markInterceptedButtons();
+        }
+      })
+      .catch(function() {});
+  }
+
+  // ── Estado del delivery ────────────────────────────────────────
+  // Prioridad: window.__ceState (escrito por App Block si está en esta página) → localStorage
+
+  function requiresSelection() {
+    var cfg = window.__ceCfg;
+    return !cfg || cfg.requireDelivery !== false;
+  }
+
+  function isPickup() {
+    if (window.__ceState) return !!window.__ceState.pickup;
+    return localStorage.getItem(LSK + '_pickup') === 'true';
+  }
+
+  function getCity() {
+    if (window.__ceState && !window.__ceState.pickup) return window.__ceState.city || '';
+    if (isPickup()) return '';
+    return localStorage.getItem(LSK + '_city') || '';
+  }
+
+  function getDate() {
+    if (window.__ceState && !window.__ceState.pickup) return window.__ceState.date || '';
+    return localStorage.getItem(LSK + '_date') || '';
+  }
+
+  function canCheckout() {
+    if (!requiresSelection()) return true;
+    if (isPickup()) return true;
+    return !!(getCity() && getDate());
+  }
+
+  function alertAndScroll() {
+    var widget = document.querySelector('[id^="ce-widget-"]');
+    if (widget) widget.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(function() {
+      alert('⚠️ Por favor selecciona una ciudad y fecha de entrega antes de continuar al checkout.');
+    }, 300);
+  }
+
+  function doCheckoutRedirect() {
+    var pickup = isPickup();
+    var city   = !pickup ? getCity() : '';
+    var date   = !pickup ? getDate() : '';
+
+    console.log('[Calendify Embed] checkout redirect – city:', city, '| date:', date, '| pickup:', pickup);
+
+    var fd = new FormData();
+    fd.append('attributes[delivery_type]', pickup ? 'pickup' : 'delivery');
+    fd.append('attributes[delivery_city]', city);
+    fd.append('attributes[delivery_date]', date);
+
+    fetch('/cart/update.js', { method: 'POST', body: fd })
+      .finally(function() {
+        var checkoutUrl = pickup
+          ? '/checkout'
+          : '/checkout?checkout[shipping_address][city]=' + encodeURIComponent(city);
+        console.log('[Calendify Embed] redirigiendo a:', checkoutUrl);
+        window.location.href = checkoutUrl;
+      });
+  }
+
+  // ── Listeners de interceptación ────────────────────────────────
+
+  function onCustomBtnClick(e) {
+    if (window.__ceSelectionMode) return;
+
+    var selectors = getAllSelectors();
+    var btn = null;
+    for (var i = 0; i < selectors.length; i++) {
+      try {
+        var found = e.target.closest(selectors[i]);
+        if (found) { btn = found; break; }
+      } catch (_) {}
+    }
+    if (!btn) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+
+    console.log('[Calendify Embed] Click capturado en:', btn.tagName, '#' + btn.id, 'name=' + btn.name);
+    console.log('[Calendify Embed] canCheckout:', canCheckout(), '| city:', getCity(), '| date:', getDate());
+
+    if (!canCheckout()) {
+      console.log('[Calendify Embed] checkout BLOQUEADO – sin ciudad/fecha');
+      alertAndScroll();
+      return;
+    }
+
+    doCheckoutRedirect();
+  }
+
+  function onFormSubmit(e) {
+    var form      = e.target;
+    var action    = (form.action || '').toLowerCase();
+    var submitter = e.submitter;
+
+    // form.querySelector solo encuentra hijos DOM — botones con form="formId" fuera
+    // del DOM del form no son hijos, por eso verificamos e.submitter también.
+    var isCheckout = action.includes('/checkout') ||
+                     form.querySelector('[name="checkout"]') ||
+                     (submitter && submitter.name === 'checkout');
+
+    console.log('[Calendify Embed] submit event – action:', action,
+                '| submitter:', submitter ? ('#' + submitter.id + ' name=' + submitter.name) : 'none',
+                '| isCheckout:', isCheckout);
+
+    if (!isCheckout) return;
+
+    if (!canCheckout()) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('[Calendify Embed] submit BLOQUEADO – sin ciudad/fecha');
+      alertAndScroll();
+      return;
+    }
+
+    // Botón name="checkout" asociado a form /cart → redirect manual (form POST va a /cart, no /checkout)
+    if (submitter && submitter.name === 'checkout') {
+      e.preventDefault();
+      e.stopPropagation();
+      doCheckoutRedirect();
+      return;
+    }
+
+    // Form cuyo action ya apunta a /checkout → inyectar ciudad como campo oculto
+    if (!isPickup()) {
+      var city  = getCity();
+      var field = 'checkout[shipping_address][city]';
+      if (city && !form.querySelector('[name="' + field + '"]')) {
+        var inp   = document.createElement('input');
+        inp.type  = 'hidden';
+        inp.name  = field;
+        inp.value = city;
+        form.appendChild(inp);
+      }
+    }
+  }
+
+  function onLinkClick(e) {
+    var link = e.target.closest('a[href*="/checkout"]');
+    if (!link) return;
+
+    if (!canCheckout()) {
+      e.preventDefault();
+      e.stopPropagation();
+      alertAndScroll();
+      return;
+    }
+
+    var city = !isPickup() ? getCity() : '';
+    if (city) {
+      try {
+        var url = new URL(link.href);
+        url.searchParams.set('checkout[shipping_address][city]', city);
+        link.href = url.toString();
+      } catch (_) {}
+    }
+  }
+
+  function markInterceptedButtons() {
+    getAllSelectors().forEach(function(sel) {
+      try {
+        document.querySelectorAll(sel).forEach(function(btn) {
+          if (btn.dataset.ceIntercepted) return;
+          btn.dataset.ceIntercepted = '1';
+          console.log('[Calendify Embed] Botón detectado:', sel,
+                      btn.id ? '#' + btn.id : btn.tagName);
+        });
+      } catch (_) {}
+    });
+  }
+
+  function setupInterception() {
+    if (window.__ceInterceptor) return;
+    window.__ceInterceptor = true;
+
+    document.addEventListener('submit', onFormSubmit,     true);
+    document.addEventListener('click',  onLinkClick,      true);
+    document.addEventListener('click',  onCustomBtnClick, true);
+
+    new MutationObserver(markInterceptedButtons)
+      .observe(document.body, { childList: true, subtree: true });
+
+    console.log('[Calendify Embed] Interceptación universal activa');
+  }
+
+  // Arrancar la interceptación lo antes posible
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function() {
+      setupInterception();
+      markInterceptedButtons();
+      loadSavedSelectors();
+    });
+  } else {
+    setupInterception();
+    markInterceptedButtons();
+    loadSavedSelectors();
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // PARTE 2 — MODO SELECCIÓN VISUAL
+  // Solo se ejecuta si ?ce_select_mode=1 o sessionStorage lo indica.
+  // ═══════════════════════════════════════════════════════════════
+
+  var SS_MODE  = 'ce_sel_active';
+  var SS_SELS  = 'ce_sel_sels';
+  var SS_INTRO = 'ce_sel_intro';
+
+  var urlMode = new URL(window.location.href).searchParams.get('ce_select_mode') === '1';
+  var ssMode  = sessionStorage.getItem(SS_MODE) === '1';
+
+  console.log('[Calendify Embed] urlMode:', urlMode, '| ssMode:', ssMode,
+              '→ modo selección:', (urlMode || ssMode) ? 'ACTIVO' : 'INACTIVO');
+
+  if (!urlMode && !ssMode) return;
+
+  // Primera activación = llega desde el link del admin (URL param, sin sesión previa)
+  var firstActivation = urlMode && !ssMode;
+
+  sessionStorage.setItem(SS_MODE, '1');
+  window.__ceSelectionMode = true;
+
+  // Cargar selecciones de páginas anteriores en esta sesión
+  var selected;
+  try { selected = JSON.parse(sessionStorage.getItem(SS_SELS) || '[]'); }
+  catch (_) { selected = []; }
+
+  function persistSelected() {
+    sessionStorage.setItem(SS_SELS, JSON.stringify(selected));
+  }
 
   // ── Estilos ────────────────────────────────────────────────────
   var style = document.createElement('style');
@@ -283,7 +524,7 @@
   // ── Escanear y resaltar botones ────────────────────────────────
   function scan() {
     var found = 0;
-    CE_SELECTORS.forEach(function(sel) {
+    getAllSelectors().forEach(function(sel) {
       try {
         document.querySelectorAll(sel).forEach(function(el) {
           if (el.closest('#ce-sel-bar') || el.closest('#ce-intro')) return;
@@ -380,7 +621,7 @@
     });
   }
 
-  // ✗ Cancelar: sale sin guardar, se queda en la página actual
+  // ✗ Cancelar: sale sin guardar
   function doCancel() {
     clearMode();
     var cu = new URL(window.location.href);
@@ -398,7 +639,6 @@
   }
 
   // ── Cargar selectores del backend al iniciar por primera vez ──
-  // Solo en primera activación (URL param, sin sesión previa en esta pestaña)
   function loadFromBackend() {
     fetch('/apps/proxy/api/button-selectors?shop=' + encodeURIComponent(SHOP))
       .then(function(r) { return r.json(); })
@@ -414,17 +654,16 @@
           updateCount();
         }
       })
-      .catch(function() {}); // silencioso — no bloquear la UI si falla
+      .catch(function() {});
   }
 
-  // ── Init ───────────────────────────────────────────────────────
+  // ── Init modo selección ────────────────────────────────────────
   function init() {
     buildBar();
     maybeShowIntro();
     var found = scan();
     showNoBtnsMsg(found);
 
-    // Cargar selectores del backend si es la primera activación de la sesión
     if (firstActivation) loadFromBackend();
 
     new MutationObserver(function() {
