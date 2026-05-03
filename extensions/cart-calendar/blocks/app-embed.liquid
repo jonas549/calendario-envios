@@ -170,19 +170,74 @@
     }
     if (!btn) return;
 
-    // ── Caso especial: Buy it now + pickup ────────────────────────
-    // Buy it now crea un checkout aislado del cart principal.
-    // Si redirigimos manualmente a /checkout con el cart vacío → Shopify → HOME.
-    // Para pickup no necesitamos inyectar ciudad, así que dejamos el flujo nativo
-    // y solo guardamos delivery_type=pickup en cart attrs (best-effort).
-    if (isBuyItNowBtn(btn) && isPickup()) {
-      console.log('[Calendify Embed] Buy it now + pickup: flujo nativo, attrs en background');
-      var fdBin = new FormData();
-      fdBin.append('attributes[delivery_type]', 'pickup');
-      fdBin.append('attributes[delivery_city]', '');
-      fdBin.append('attributes[delivery_date]', '');
-      fetch('/cart/update.js', { method: 'POST', body: fdBin }).catch(function() {});
-      return; // Sin preventDefault → el web component sigue su flujo nativo
+    // ── Caso especial: Buy it now (delivery o pickup) ─────────────
+    // El web component hace add-to-cart + redirect internamente.
+    // Si hacemos e.preventDefault() el producto NO se agrega → cart vacío → HOME.
+    if (isBuyItNowBtn(btn)) {
+      console.log('[Calendify Embed] Buy it now detectado | isPickup:', isPickup(), '| canCheckout:', canCheckout());
+
+      if (!canCheckout()) {
+        // Sin selección → bloquear
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+        console.log('[Calendify Embed] Buy it now BLOQUEADO – sin ciudad/fecha');
+        alertAndScroll();
+        return;
+      }
+
+      if (isPickup()) {
+        // Pickup → flujo nativo (el web component agrega producto y va al checkout)
+        // Guardamos delivery_type=pickup en cart attrs en background (best-effort)
+        var fdPickup = new FormData();
+        fdPickup.append('attributes[delivery_type]', 'pickup');
+        fdPickup.append('attributes[delivery_city]', '');
+        fdPickup.append('attributes[delivery_date]', '');
+        fetch('/cart/update.js', { method: 'POST', body: fdPickup }).catch(function() {});
+        console.log('[Calendify Embed] Buy it now + pickup: flujo nativo');
+        return; // Sin preventDefault → web component agrega producto y redirige
+      }
+
+      // Delivery → necesitamos agregar el producto al cart manualmente ANTES de redirigir.
+      // Si bloqueamos el web component con preventDefault, el cart queda vacío → HOME.
+      // Buscamos el variantId en el form del producto más cercano.
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      var city = getCity();
+      var date = getDate();
+      console.log('[Calendify Embed] Buy it now + delivery | city:', city, '| date:', date);
+
+      var productForm = btn.closest('form[action*="/cart/add"]') ||
+                        document.querySelector('form[action*="/cart/add"]');
+      var variantInput = productForm ? productForm.querySelector('input[name="id"]') : null;
+      var variantId    = variantInput ? variantInput.value : null;
+      var qtyInput     = productForm ? productForm.querySelector('input[name="quantity"]') : null;
+      var qty          = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : 1;
+
+      console.log('[Calendify Embed] Buy it now variantId:', variantId, '| qty:', qty);
+
+      if (variantId) {
+        // Agregar producto al cart primero, luego redirigir al checkout con city
+        var fdAdd = new FormData();
+        fdAdd.append('id', variantId);
+        fdAdd.append('quantity', String(qty));
+        fetch('/cart/add.js', { method: 'POST', body: fdAdd })
+          .then(function() {
+            console.log('[Calendify Embed] Buy it now: producto agregado al cart, redirigiendo');
+            doCheckoutRedirect();
+          })
+          .catch(function(err) {
+            console.warn('[Calendify Embed] Buy it now: /cart/add.js falló, redirigiendo igual:', err);
+            doCheckoutRedirect();
+          });
+      } else {
+        // No encontramos variantId → redirigir igual (best-effort, cart puede estar vacío)
+        console.warn('[Calendify Embed] Buy it now: no se encontró variantId, redirigiendo sin agregar');
+        doCheckoutRedirect();
+      }
+      return;
     }
 
     e.preventDefault();

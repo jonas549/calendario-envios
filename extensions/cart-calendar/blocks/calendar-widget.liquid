@@ -266,8 +266,8 @@
     if (checked) {
       localStorage.setItem(LSK + '_pickup', 'true');
       sessionStorage.setItem(LSK + '_pickup', 'true');
-      localStorage.removeItem(LSK + '_city');
-      localStorage.removeItem(LSK + '_date');
+      // _city y _date se conservan en localStorage: notifyState() los ignora mientras
+      // pickup=true, y estarán disponibles automáticamente al desmarcar pickup.
       updateCartAttributes({ delivery_type: 'pickup', delivery_city: '', delivery_date: '' });
     } else {
       localStorage.removeItem(LSK + '_pickup');
