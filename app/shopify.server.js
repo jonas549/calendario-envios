@@ -58,17 +58,57 @@ export const authenticate = {
   webhook: shopify.authenticate.webhook,
 };
 
+// Cache por tienda: { shop -> { isTest, expiresAt } }
+const _devStoreCache = new Map();
+const _CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+// Detecta automáticamente si la tienda es dev store o real.
+// Fallback a true (no cobra) si la query falla, para evitar cobros accidentales.
+export async function getIsTest(admin, shop) {
+  const cached = _devStoreCache.get(shop);
+  if (cached && Date.now() < cached.expiresAt) {
+    return cached.isTest;
+  }
+
+  try {
+    const response = await admin.graphql(`
+      query {
+        shop {
+          plan {
+            partnerDevelopment
+            publicDisplayName
+          }
+        }
+      }
+    `);
+    const data = await response.json();
+    const plan = data?.data?.shop?.plan;
+    const isTest =
+      plan?.partnerDevelopment === true ||
+      plan?.publicDisplayName === "Development";
+
+    _devStoreCache.set(shop, { isTest, expiresAt: Date.now() + _CACHE_TTL });
+    logger.info("billing", `Tipo de tienda detectado: ${isTest ? "dev store" : "tienda real"} (isTest=${isTest})`, { plan }, shop);
+    return isTest;
+  } catch (error) {
+    logger.warn("billing", "Error detectando tipo de tienda — fallback a isTest: true (seguro)", { error: error.message }, shop);
+    return true;
+  }
+}
+
 // Helper para verificar subscripción activa
 export async function requireBilling(request) {
-  const { billing, session } = await authenticate.admin(request);
-  
+  const { billing, session, admin } = await authenticate.admin(request);
+
   logger.info("billing-check", "Verificando billing", null, session.shop);
-  
+
+  const isTest = await getIsTest(admin, session.shop);
+
   await billing.require({
     plans: ["Plan Pro"],
-    isTest: process.env.BILLING_TEST_MODE === "true",
+    isTest,
   });
-  
+
   logger.info("billing-check", "Billing verificado OK", null, session.shop);
 }
 

@@ -1,23 +1,25 @@
 import { Page, Layout, Card, Text, BlockStack } from "@shopify/polaris";
-import { authenticate } from "../shopify.server";
+import { authenticate, getIsTest } from "../shopify.server";
 import { logger } from "../utils/logger.server";
 
 export const loader = async ({ request }) => {
   try {
-    const { billing, session } = await authenticate.admin(request);
+    const { billing, session, admin } = await authenticate.admin(request);
     const shop = session.shop;
 
     logger.info("billing", "Verificando billing", { shop }, shop);
 
+    const isTest = await getIsTest(admin, shop);
+
     // Verificar si ya tiene subscripción
     const billingCheck = await billing.check({
       plans: ["Plan Pro"],
-      isTest: process.env.BILLING_TEST_MODE === "true",
+      isTest,
     });
 
     if (billingCheck.hasActivePayment) {
       logger.info("billing", "Ya tiene subscripción activa, redirigiendo a installer", null, shop);
-      
+
       // Ya tiene pago, ir al installer
       return new Response(null, {
         status: 302,
@@ -32,7 +34,7 @@ export const loader = async ({ request }) => {
 
     const billingResponse = await billing.request({
       plan: "Plan Pro",
-      isTest: process.env.BILLING_TEST_MODE === "true",
+      isTest,
       returnUrl: `${process.env.SHOPIFY_APP_URL}/app`
     });
 
