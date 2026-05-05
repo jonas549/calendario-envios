@@ -1,9 +1,35 @@
 import { Outlet, useSearchParams } from "react-router";
-import { requireBilling } from "../shopify.server";
+import { authenticate } from "../shopify.server";
 import { AppProvider, Frame, Navigation } from "@shopify/polaris";
+import { logger } from "../utils/logger.server";
+
+const APP_HANDLE = "calendify-delivery";
 
 export const loader = async ({ request }) => {
-  await requireBilling(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
+
+  const response = await admin.graphql(`
+    query {
+      currentAppInstallation {
+        activeSubscriptions {
+          id
+          status
+        }
+      }
+    }
+  `);
+  const { data } = await response.json();
+  const activeSubscriptions = data?.currentAppInstallation?.activeSubscriptions ?? [];
+
+  logger.info("billing-check", `Suscripciones activas: ${activeSubscriptions.length}`, null, session.shop);
+
+  if (activeSubscriptions.length === 0) {
+    const storeHandle = session.shop.replace(".myshopify.com", "");
+    const pricingUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${APP_HANDLE}/pricing_plans`;
+    logger.info("billing-check", "Sin suscripción activa, redirigiendo a Managed Pricing", { pricingUrl }, session.shop);
+    return redirect(pricingUrl, { target: "_top" });
+  }
+
   return {};
 };
 
