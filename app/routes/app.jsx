@@ -27,7 +27,15 @@ export const loader = async ({ request }) => {
     const storeHandle = session.shop.replace(".myshopify.com", "");
     const pricingUrl = `https://admin.shopify.com/store/${storeHandle}/charges/${APP_HANDLE}/pricing_plans`;
     logger.info("billing-check", "Sin suscripción activa, redirigiendo a Managed Pricing", { pricingUrl }, session.shop);
-    return redirect(pricingUrl, { target: "_top" });
+    // El SDK hace throw de la Response HTML en contexto embebido.
+    // React Router v7 trata los throw como errores (ErrorBoundary), no los renderiza.
+    // Capturamos el throw y lo retornamos para que React Router lo envíe directamente al browser.
+    try {
+      return redirect(pricingUrl, { target: "_top" });
+    } catch (thrown) {
+      if (thrown instanceof Response) return thrown;
+      throw thrown;
+    }
   }
 
   return {};
