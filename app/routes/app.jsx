@@ -1,9 +1,9 @@
 import { Outlet, useSearchParams } from "react-router";
-import { authenticate } from "../shopify.server";
+import { requireBilling } from "../shopify.server";
 import { AppProvider, Frame, Navigation } from "@shopify/polaris";
 
 export const loader = async ({ request }) => {
-  await authenticate.admin(request);
+  await requireBilling(request);
   return {};
 };
 

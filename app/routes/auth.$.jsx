@@ -1,4 +1,4 @@
-import { redirect } from "@remix-run/node";
+import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { logger } from "../utils/logger.server";
@@ -11,9 +11,8 @@ export const loader = async ({ request }) => {
     
     logger.info("auth", "OAuth exitoso", { shop: session.shop }, session.shop);
     
-    // SIEMPRE redirigir a billing después de OAuth
-    logger.info("auth", "Redirigiendo a /app/billing", null, session.shop);
-    return redirect("/app/billing");
+    logger.info("auth", "Redirigiendo a /app", null, session.shop);
+    return redirect("/app");
     
   } catch (error) {
     logger.error("auth", "Error en autenticación", { 

@@ -7,9 +7,9 @@ export const loader = async ({ request }) => {
     const { session } = await authenticate.admin(request);
     
     logger.info("callback", "OAuth callback exitoso", { shop: session.shop }, session.shop);
-    logger.info("callback", "Redirigiendo a /app/billing", null, session.shop);
-    
-    return redirect("/app/billing");
+    logger.info("callback", "Redirigiendo a /app", null, session.shop);
+
+    return redirect("/app");
   } catch (error) {
     logger.error("callback", "Error en callback", {
       error: error.message,
