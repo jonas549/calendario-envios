@@ -107,6 +107,7 @@ export async function requireBilling(request) {
   await billing.require({
     plans: ["Plan Pro"],
     isTest,
+    onFailure: async () => billing.request({ plan: "Plan Pro", isTest }),
   });
 
   logger.info("billing-check", "Billing verificado OK", null, session.shop);
