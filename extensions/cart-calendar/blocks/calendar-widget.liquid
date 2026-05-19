@@ -96,6 +96,9 @@
       </select>
     </div>
 
+    <!-- Costo de envío por ciudad -->
+    <div id="ce-shipping-{{ wid }}" style="display:none; margin-top:8px; padding:8px 12px; background:#f0f4ff; border-left:3px solid #0066cc; border-radius:4px; font-size:13px; color:#444;"></div>
+
     <!-- Selector de fecha: trigger clickeable + panel colapsable -->
     <div id="ce-date-wrapper-{{ wid }}" class="ce-field" style="display: none;">
       <label>Fecha de entrega</label>
@@ -131,6 +134,7 @@
   window.__ceShop = SHOP;
 
   var appConfig        = {};
+  var citiesData       = {};
   var fpInstance       = null;
   var deliverySelected = false;
   var pickupSelected   = false;
@@ -235,7 +239,19 @@
       opt.value       = city.name;
       opt.textContent = city.name;
       select.appendChild(opt);
+      citiesData[city.name] = city.shippingCost || 0;
     });
+  }
+
+  function showShippingCost(cityName) {
+    var el = document.getElementById('ce-shipping-' + WID);
+    if (!el) return;
+    if (!cityName) { el.style.display = 'none'; return; }
+    var cost = citiesData[cityName] || 0;
+    el.textContent = cost > 0
+      ? '🚚 Costo de envío: $' + (cost % 1 === 0 ? cost : cost.toFixed(2))
+      : '🚚 Envío gratis';
+    el.style.display = 'block';
   }
 
   // ── Pickup ────────────────────────────────────────────────────
@@ -268,7 +284,7 @@
       sessionStorage.setItem(LSK + '_pickup', 'true');
       // _city y _date se conservan en localStorage: notifyState() los ignora mientras
       // pickup=true, y estarán disponibles automáticamente al desmarcar pickup.
-      updateCartAttributes({ delivery_type: 'pickup', delivery_city: '', delivery_date: '' });
+      updateCartAttributes({ delivery_type: 'pickup', delivery_city: '', delivery_date: '', delivery_shipping_cost: '' });
     } else {
       localStorage.removeItem(LSK + '_pickup');
       sessionStorage.setItem(LSK + '_pickup', 'false');
@@ -290,10 +306,12 @@
       localStorage.removeItem(LSK + '_date');
       deliverySelected    = false;
       $w('msg').style.display = 'none';
+      showShippingCost(null);
       notifyState();
       return;
     }
 
+    showShippingCost(city);
     showMsg('⏳ Cargando fechas disponibles...', 'loading');
 
     try {
@@ -380,9 +398,15 @@
 
   // ── Date selected ─────────────────────────────────────────────
   function onDateSelected(city, dateStr) {
+    var cost = citiesData[city] || 0;
     localStorage.setItem(LSK + '_city', city);
     localStorage.setItem(LSK + '_date', dateStr);
-    updateCartAttributes({ delivery_city: city, delivery_date: dateStr, delivery_type: 'delivery' });
+    updateCartAttributes({
+      delivery_city: city,
+      delivery_date: dateStr,
+      delivery_type: 'delivery',
+      delivery_shipping_cost: cost.toString(),
+    });
     deliverySelected = true;
     updateDateDisplay(dateStr);
     closeCalPanel();

@@ -30,14 +30,15 @@ model Session {
 }
 
 model City {
-  id          String   @id @default(cuid())
-  shop        String
-  name        String
-  cutoffTime  String
-  days        String
-  active      Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String   @id @default(cuid())
+  shop         String
+  name         String
+  cutoffTime   String
+  days         String
+  shippingCost Float    @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@unique([shop, name])
   @@index([shop])

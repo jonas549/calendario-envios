@@ -15,7 +15,7 @@ export const loader = async ({ request }) => {
     const [cities, config] = await Promise.all([
       prisma.city.findMany({
         where: { shop, active: true },
-        select: { name: true },
+        select: { name: true, shippingCost: true },
         orderBy: { name: "asc" },
       }),
       prisma.config.findUnique({

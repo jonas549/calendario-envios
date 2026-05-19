@@ -42,6 +42,7 @@ export const action = async ({ request }) => {
         name: formData.get("name"),
         cutoffTime: formData.get("cutoffTime"),
         days: formData.get("days"),
+        shippingCost: parseFloat(formData.get("shippingCost")) || 0,
         active: formData.get("active") === "true",
       },
     });
@@ -49,13 +50,14 @@ export const action = async ({ request }) => {
 
   if (action === "update") {
     await prisma.city.update({
-      where: { 
+      where: {
         id: formData.get("id"),
       },
       data: {
         name: formData.get("name"),
         cutoffTime: formData.get("cutoffTime"),
         days: formData.get("days"),
+        shippingCost: parseFloat(formData.get("shippingCost")) || 0,
         active: formData.get("active") === "true",
       },
     });
@@ -84,6 +86,7 @@ export default function Ciudades() {
     lun: true, mar: true, mie: true, jue: true, vie: true, sab: false, dom: false
   });
   const [active, setActive] = useState(true);
+  const [shippingCost, setShippingCost] = useState("0");
 
   const openCreateModal = () => {
     setEditingCity(null);
@@ -91,6 +94,7 @@ export default function Ciudades() {
     setCutoffTime("14:00");
     setDays({ lun: true, mar: true, mie: true, jue: true, vie: true, sab: false, dom: false });
     setActive(true);
+    setShippingCost("0");
     setModalActive(true);
   };
 
@@ -100,6 +104,7 @@ export default function Ciudades() {
     setCutoffTime(city.cutoffTime);
     setDays(JSON.parse(city.days));
     setActive(city.active);
+    setShippingCost((city.shippingCost ?? 0).toString());
     setModalActive(true);
   };
 
@@ -113,6 +118,7 @@ export default function Ciudades() {
     formData.append("cutoffTime", cutoffTime);
     formData.append("days", JSON.stringify(days));
     formData.append("active", active.toString());
+    formData.append("shippingCost", shippingCost);
     submit(formData, { method: "post" });
     setModalActive(false);
   };
@@ -133,10 +139,14 @@ export default function Ciudades() {
       .map(([k]) => k.toUpperCase())
       .join(", ");
 
+    const cost = city.shippingCost ?? 0;
+    const costStr = cost > 0 ? `$${cost % 1 === 0 ? cost : cost.toFixed(2)}` : "Gratis";
+
     return [
       city.name,
       city.cutoffTime,
       daysStr,
+      costStr,
       city.active ? "✅ Activo" : "❌ Inactivo",
       <ButtonGroup>
         <Button onClick={() => openEditModal(city)} size="slim">
@@ -165,8 +175,8 @@ export default function Ciudades() {
               <Text as="p">No hay ciudades configuradas. Agrega la primera.</Text>
             ) : (
               <DataTable
-                columnContentTypes={["text", "text", "text", "text", "text"]}
-                headings={["Ciudad", "Hora de corte", "Días activos", "Estado", "Acciones"]}
+                columnContentTypes={["text", "text", "text", "numeric", "text", "text"]}
+                headings={["Ciudad", "Hora de corte", "Días activos", "Costo de envío", "Estado", "Acciones"]}
                 rows={rows}
               />
             )}
@@ -202,6 +212,17 @@ export default function Ciudades() {
               value={cutoffTime}
               onChange={setCutoffTime}
               helpText="Hora límite para pedidos del mismo día (formato 24h)"
+            />
+
+            <TextField
+              label="Costo de envío"
+              type="number"
+              value={shippingCost}
+              onChange={setShippingCost}
+              prefix="$"
+              min="0"
+              step="0.01"
+              helpText="Ingresa 0 para envío gratis"
             />
 
             <BlockStack gap="200">
